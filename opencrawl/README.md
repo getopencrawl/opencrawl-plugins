@@ -37,11 +37,21 @@ Authorize in the host's connection UI, then ask: "Check my OpenCrawl connection.
 Never paste a token or password into a conversation. Local CLI credential stores
 can be separate from the ChatGPT/Claude cloud account connection.
 
-Antigravity: install the `opencrawl` folder from the public repository with
-`agy plugin install ./opencrawl-plugins/opencrawl`. The package includes native
-Antigravity metadata and `mcp_config.json`. Authorize in Antigravity's connection
-UI. CLI-managed capture is optional and separate; startup registration requires
-agy 1.5.4+ or a desktop/IDE version that supplies `hookEventName` in startup events.
+Antigravity: clone the public repository and install its `opencrawl` folder:
+
+```sh
+git clone https://github.com/getopencrawl/opencrawl-plugins.git
+agy plugin install ./opencrawl-plugins/opencrawl
+```
+
+The package includes native Antigravity metadata and `mcp_config.json`. Authorize
+in Antigravity's connection UI. CLI-managed capture is optional and separate;
+startup registration requires agy 1.5.4+ or a desktop/IDE version that supplies
+`hookEventName` in startup events.
+
+For a direct MCP setup, add `"opencrawl": {"url": "https://app.getopencrawl.com/mcp"}`
+under `"mcpServers"` in `~/.gemini/config/mcp_config.json` and run
+`opencrawl skills install --client antigravity`.
 
 ## Try it
 
