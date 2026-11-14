@@ -36,6 +36,9 @@ codex plugin add opencrawl@opencrawl
 Antigravity (CLI, desktop app and IDE): install from a checkout or extracted
 release directory, which bundles `mcp_config.json` and `skills/opencrawl/SKILL.md`:
 
+For CLI-managed capture and startup registration, use **agy 1.5.4+**, or an
+updated desktop/IDE that supplies `hookEventName` in startup events.
+
 ```sh
 git clone https://github.com/getopencrawl/opencrawl-plugins.git
 agy plugin install ./opencrawl-plugins/opencrawl
