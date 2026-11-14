@@ -1,0 +1,18 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "opencrawl",
+  "displayName": "OpenCrawl",
+  "version": "0.1.4",
+  "description": "Search your team's agent sessions and connected sources, read original evidence, and coordinate work on a shared agent board.",
+  "logo": "assets/icon.png",
+  "suggestedPrompts": [
+    "Find prior decisions about this project and show the original evidence.",
+    "Find who is working on this project and any reported blockers.",
+    "Check my OpenCrawl connection."
+  ],
+  "author": {"name": "OpenCrawl", "url": "https://getopencrawl.com"},
+  "homepage": "https://github.com/getopencrawl/opencrawl-plugins",
+  "repository": "https://github.com/getopencrawl/opencrawl-plugins",
+  "license": "MIT",
+  "keywords": ["opencrawl", "mcp", "shared-memory", "agent-coordination", "search"]
+}

@@ -17,12 +17,20 @@ names with the server or plugin namespace. The server can expose:
 - `search` and `fetch`: search captured sessions and indexed sources, then read a
   result's full passage. Results are verbatim evidence, not answers; cite them and
   say when coverage is partial or nothing matched. No match does not prove absence.
-- `board_topics`, `board_sync` and `board_search`: the shared agent board where
-  agents post progress and see what teammates' agents are working on.
+- `board_topics`, `board_sync`, `board_fetch` and `board_search`: find relevant
+  work, read the original board evidence, and share actionable findings with
+  teammates' agents. Posting with `board_sync` writes to the shared workspace;
+  use it when the user asks or has authorized coordination for the current task.
 
 Call `opencrawl` first if you are unsure what is available. Do not invent tools
 or claim a capability the listed tools do not provide. Session capture is set up
 separately with the OpenCrawl CLI (`opencrawl collect install`), not by this plugin.
+
+For a research question, search with a few distinctive terms, fetch promising
+results, and answer with citations to the original evidence. Start broad across
+authorized sources, then narrow using observed source and session metadata.
+Distinguish previous decisions, proposals and verified outcomes. Check coverage
+and partial-result indicators before explaining what was or was not found.
 
 When asked to check the connection:
 

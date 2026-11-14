@@ -3,13 +3,27 @@ import assert from 'node:assert/strict';
 import {readFile, mkdtemp, cp, writeFile, rm, symlink} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {root, validate, validateManifests} from '../scripts/validate.mjs';
-const configs = await Promise.all(['plugin.json', '.claude-plugin/plugin.json', 'mcp.json', '.mcp.json'].map(async path => JSON.parse(await readFile(join(root, 'opencrawl', path)))));
+import {root, validate, validateManifests, validateListing} from '../scripts/validate.mjs';
+const configs = await Promise.all(['plugin.json', '.claude-plugin/plugin.json', 'mcp.json', '.mcp.json', 'mcp_config.json', '.antigravity-plugin/plugin.json'].map(async path => JSON.parse(await readFile(join(root, 'opencrawl', path)))));
 test('both host manifests and allowlisted package are consistent', async () => {await validate();});
+test('listing catches submission limits, missing public links and hidden write capabilities', () => {
+  for (const change of [
+    listing => {listing.shortDescription = 'a'.repeat(31);},
+    listing => {delete listing.supportURL;},
+    listing => {listing.termsOfServiceURL = 'http://example.com/terms';},
+    listing => {listing.capabilities = ['Read'];},
+  ]) {
+    const listing = structuredClone(configs[0].extensions['com.openai'].interface);
+    change(listing);
+    assert.throws(() => validateListing(listing));
+  }
+});
 test('reject embedded credentials and local command transports', () => {
-  for (const change of [s => {s.headers = {Authorization: 'Bearer forbidden'};}, s => {s.command = 'node';}]) {
-    const copy = structuredClone(configs); change(copy[3].mcpServers.opencrawl);
-    assert.throws(() => validateManifests(...copy));
+  for (const index of [3, 4]) {
+    for (const change of [s => {s.headers = {Authorization: 'Bearer forbidden'};}, s => {s.command = 'node';}]) {
+      const copy = structuredClone(configs); change(copy[index].mcpServers.opencrawl);
+      assert.throws(() => validateManifests(...copy));
+    }
   }
 });
 test('reject different resource audiences and no-auth downgrade', () => {
@@ -38,7 +52,7 @@ test('Cursor package rejects unexpected files, credential transports and blockin
   await cp(root+'/opencrawl-cursor',temp+'/opencrawl-cursor',{recursive:true});
   await cp(root+'/.cursor-plugin',temp+'/.cursor-plugin',{recursive:true});
   await cp(root+'/LICENSE',temp+'/LICENSE');
-  assert.equal(await validateCursor(temp),'0.1.1');
+  assert.equal(await validateCursor(temp),JSON.parse(await readFile(root+'/opencrawl-cursor/.cursor-plugin/plugin.json','utf8')).version);
   const manifestPath=temp+'/opencrawl-cursor/.cursor-plugin/plugin.json',manifest=JSON.parse(await readFile(manifestPath,'utf8'));
   await writeFile(manifestPath,JSON.stringify({...manifest,hooks:{preToolUse:[{command:'deny'}]}}));await assert.rejects(validateCursor(temp));await writeFile(manifestPath,JSON.stringify(manifest));
   const mcp=temp+'/opencrawl-cursor/mcp.json',original=await readFile(mcp,'utf8');

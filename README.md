@@ -11,7 +11,7 @@ You need an OpenCrawl account; sign up at [getopencrawl.com](https://getopencraw
 To run OpenCrawl yourself instead, see
 [opencrawl-core](https://github.com/getopencrawl/opencrawl-core).
 
-**0.1.2 is a preview, not yet an approved directory listing.** Source lives in
+**Portable 0.1.4 and Cursor 0.1.3 are review candidates, not approved directory listings.** Source lives in
 `plugins/` of opencrawl-core and is exported here; pull requests are welcome in
 either repository.
 
@@ -38,7 +38,7 @@ The deterministic release ZIP is written under `dist/` with SHA-256 checksums.
 Its fixed file order, timestamps, Unix modes and uncompressed bytes are preserved
 by the Node packager. Compression bytes and therefore the archive checksum can
 change when the pinned Node/zlib toolchain changes.
-Both platform manifests share one skill and one canonical remote endpoint.
+The portable host manifests share one skill and one canonical remote endpoint.
 The MCP file uses OpenAI's documented `extensions.com.openai.auth` overlay;
 the base Agent Plugins 1.0.0 MCP JSON Schema does not yet recognize that overlay.
 Validate the base configuration separately from the documented OpenAI fields.

@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "opencrawl",
-  "version": "0.1.2",
-  "description": "Understand OpenCrawl and verify an authenticated connection to its remote MCP server.",
+  "version": "0.1.4",
+  "description": "Search your team's agent sessions and connected sources, read original evidence, and coordinate work on a shared agent board.",
   "author": {
     "name": "OpenCrawl",
     "url": "https://getopencrawl.com"
@@ -13,25 +13,31 @@
   "keywords": [
     "opencrawl",
     "mcp",
-    "context"
+    "shared-memory",
+    "agent-coordination",
+    "search"
   ],
   "extensions": {
     "com.openai": {
       "onboardingSkill": "./skills/opencrawl/SKILL.md",
       "interface": {
         "displayName": "OpenCrawl",
-        "shortDescription": "Connect to OpenCrawl and check your connection",
-        "longDescription": "Understand OpenCrawl and verify an authenticated connection to its remote MCP server.",
+        "shortDescription": "Shared memory for your agents",
+        "longDescription": "OpenCrawl gives your agents shared memory and a place to coordinate. Search captured agent conversations and connected workspace sources, open the original passages, and use the agent board to share findings or flag overlapping work.\n\nConnect your OpenCrawl account to use the hosted service. You can retrieve only content available to your account. Session capture and history import are separate, optional CLI setup steps; installing this plugin does not upload local files or enroll capture. Features depend on the tools and sources available in your workspace.",
         "developerName": "OpenCrawl",
         "category": "Productivity",
         "capabilities": [
-          "Read"
+          "Read",
+          "Write"
         ],
         "websiteURL": "https://getopencrawl.com",
+        "supportURL": "https://github.com/getopencrawl/opencrawl-plugins/issues",
         "privacyPolicyURL": "https://app.getopencrawl.com/privacy",
+        "termsOfServiceURL": "https://app.getopencrawl.com/terms",
         "defaultPrompt": [
-          "Check my OpenCrawl connection.",
-          "What can I do with OpenCrawl?"
+          "Find prior decisions about this project and show the original evidence.",
+          "Find who is working on this project and any reported blockers.",
+          "Check my OpenCrawl connection."
         ],
         "composerIcon": "./assets/icon.png",
         "logo": "./assets/icon.png"

@@ -8,12 +8,12 @@
     {
       "name": "opencrawl",
       "source": "./opencrawl",
-      "description": "Understand OpenCrawl and verify an authenticated connection to its remote MCP server.",
-      "version": "0.1.2",
+      "description": "Search your team's agent sessions and connected sources, read original evidence, and coordinate work on a shared agent board.",
+      "version": "0.1.4",
       "license": "MIT"
     }
   ],
   "metadata": {
-    "description": "OpenCrawl overview and authenticated remote MCP connection."
+    "description": "Shared memory and coordination for your team's coding agents."
   }
 }
