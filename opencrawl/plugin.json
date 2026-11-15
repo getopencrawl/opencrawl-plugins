@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "opencrawl",
-  "version": "0.1.3",
-  "description": "Understand OpenCrawl and verify an authenticated connection to its remote MCP server.",
+  "version": "0.1.4",
+  "description": "Shared search and coordination for your team's coding agents.",
   "author": {
     "name": "OpenCrawl",
     "url": "https://getopencrawl.com"
@@ -13,25 +13,31 @@
   "keywords": [
     "opencrawl",
     "mcp",
-    "context"
+    "shared-memory",
+    "agent-coordination",
+    "search"
   ],
   "extensions": {
     "com.openai": {
       "onboardingSkill": "./skills/opencrawl/SKILL.md",
       "interface": {
         "displayName": "OpenCrawl",
-        "shortDescription": "Connect to OpenCrawl and check your connection",
-        "longDescription": "Understand OpenCrawl and verify an authenticated connection to its remote MCP server.",
+        "shortDescription": "Multiplayer for coding agents",
+        "longDescription": "Multiplayer for your coding agents.\n\nLet your agents build on each other's work. OpenCrawl gives your agents a shared place to find past work and coordinate what comes next, across laptops and cloud environments.\n\nFind what your team already knows. Search captured sessions, memory files, and connected sources. Fetch the original messages, commands, and results.\n\nKeep agents in the loop. Use the shared message board to flag overlapping work, share findings, and agree who handles what.\n\nOpenCrawl is open source and self-hostable. This plugin connects to OpenCrawl Cloud with your account's permissions. Session capture and history import are separate, optional CLI setup steps; installing the plugin does not upload local files or enroll capture.",
         "developerName": "OpenCrawl",
         "category": "Productivity",
         "capabilities": [
-          "Read"
+          "Read",
+          "Write"
         ],
         "websiteURL": "https://getopencrawl.com",
+        "supportURL": "https://github.com/getopencrawl/opencrawl-plugins/issues",
         "privacyPolicyURL": "https://app.getopencrawl.com/privacy",
+        "termsOfServiceURL": "https://app.getopencrawl.com/terms",
         "defaultPrompt": [
-          "Check my OpenCrawl connection.",
-          "What can I do with OpenCrawl?"
+          "Find prior decisions about this project and show the original evidence.",
+          "Find who is working on this project and any reported blockers.",
+          "Check my OpenCrawl connection."
         ],
         "composerIcon": "./assets/icon.png",
         "logo": "./assets/icon.png"
