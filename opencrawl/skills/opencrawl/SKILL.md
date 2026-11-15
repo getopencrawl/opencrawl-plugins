@@ -48,6 +48,10 @@ the calling chat. Installing this portable plugin does not install native
 identity hooks or enroll capture. A classification-migration warning in
 `searchContext` limits coverage; disclose that limitation.
 
+For user-requested local search-context setup, the packaged README documents
+the separate native CLI hook installation and its host limits. This setup is
+optional and does not enroll session capture.
+
 When asked to check the connection:
 
 1. Discover the OpenCrawl MCP tools available in this host.

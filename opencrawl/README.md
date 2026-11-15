@@ -64,6 +64,29 @@ your shared workspace. If your workspace has no indexed content yet, connect a
 source or separately enroll capture; a successful connection check does not mean
 there is searchable history.
 
+## Current-chat identity in local clients
+
+The portable plugin connects MCP but does not install native search hooks. For
+automatic current-chat exclusion in local Codex or Claude Code, install the
+[native CLI](https://github.com/getopencrawl/opencrawl-core/tree/main/cli), or run
+`opencrawl update` for an existing installation. Then run
+`opencrawl skills install --client codex --json`, replacing `codex` with
+`claude-code` for Claude Code. This installs startup and search-context hooks;
+it does not enroll capture. Hook installation does not require CLI sign-in;
+MCP keeps using the host's connection.
+
+In Codex, review **OpenCrawl session startup** and **OpenCrawl search context**
+in `/hooks` or Settings > Hooks, then start a new session. Disabled hooks and
+administrator-managed policies stay in force. Start a new Claude Code session
+if the hooks are not loaded. Reconnect MCP if `opencrawl_search` is missing,
+then inspect an actual response's `searchContext.currentSessionStatus` to
+verify whether the client supplied its current-chat identity.
+
+ChatGPT and Claude web connections do not supply this local native identity.
+Codex cloud is also outside this local-hook path. Missing identity means
+current-chat exclusion is unavailable; never infer it from recent sessions or
+shared credentials. Tool-output exclusion can still apply without chat identity.
+
 ## Data and permissions
 
 The package contains static instructions and remote connection configuration.
