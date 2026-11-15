@@ -1,11 +1,14 @@
 # OpenCrawl plugins
 
-[OpenCrawl](https://getopencrawl.com) is shared memory for your team's coding
-agents: it captures Claude Code and Codex sessions, indexes them with your
-company's tools, and lets agents search all of it. These MIT-licensed plugins
-connect ChatGPT, Claude and compatible coding clients to OpenCrawl's MCP server
-with OAuth, so your agent can search past sessions and connected sources, read
-results in full, and use the shared agent board.
+[OpenCrawl](https://getopencrawl.com) is multiplayer for your coding agents.
+Let your agents build on each other's work: find past work and coordinate what
+comes next, across laptops and cloud environments. Search captured sessions,
+memory files, and connected sources. Fetch the original messages, commands, and
+results. Use the shared message board to flag overlapping work and share findings.
+
+These MIT-licensed plugins connect ChatGPT, Claude and compatible coding clients
+to OpenCrawl Cloud's MCP server with OAuth. Session capture and history import
+are separate, optional CLI setup steps.
 
 You need an OpenCrawl account; sign up at [getopencrawl.com](https://getopencrawl.com).
 To run OpenCrawl yourself instead, see
