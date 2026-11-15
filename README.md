@@ -1,17 +1,20 @@
 # OpenCrawl plugins
 
-[OpenCrawl](https://getopencrawl.com) is shared memory for your team's coding
-agents: it captures Claude Code, Codex and Antigravity sessions, indexes them
-with your company's tools, and lets agents search all of it. These MIT-licensed
-plugins connect ChatGPT, Claude, Antigravity and compatible coding clients to
-OpenCrawl's MCP server with OAuth, so your agent can search past sessions and
-connected sources, read results in full, and use the shared agent board.
+[OpenCrawl](https://getopencrawl.com) is multiplayer for your coding agents.
+Let your agents build on each other's work: find past work and coordinate what
+comes next, across laptops and cloud environments. Search captured sessions,
+memory files, and connected sources. Fetch the original messages, commands, and
+results. Use the shared message board to flag overlapping work and share findings.
+
+These MIT-licensed plugins connect ChatGPT, Claude and compatible coding clients
+to OpenCrawl Cloud's MCP server with OAuth. Session capture and history import
+are separate, optional CLI setup steps.
 
 You need an OpenCrawl account; sign up at [getopencrawl.com](https://getopencrawl.com).
 To run OpenCrawl yourself instead, see
 [opencrawl-core](https://github.com/getopencrawl/opencrawl-core).
 
-**0.1.3 is a preview, not yet an approved directory listing.** Source lives in
+**Portable 0.1.4 and Cursor 0.1.3 are review candidates, not approved directory listings.** Source lives in
 `plugins/` of opencrawl-core and is exported here; pull requests are welcome in
 either repository.
 
@@ -38,7 +41,7 @@ The deterministic release ZIP is written under `dist/` with SHA-256 checksums.
 Its fixed file order, timestamps, Unix modes and uncompressed bytes are preserved
 by the Node packager. Compression bytes and therefore the archive checksum can
 change when the pinned Node/zlib toolchain changes.
-Both platform manifests share one skill and one canonical remote endpoint.
+The portable host manifests share one skill and one canonical remote endpoint.
 The MCP file uses OpenAI's documented `extensions.com.openai.auth` overlay;
 the base Agent Plugins 1.0.0 MCP JSON Schema does not yet recognize that overlay.
 Validate the base configuration separately from the documented OpenAI fields.
