@@ -7,7 +7,7 @@
     {
       "name": "opencrawl",
       "source": "./opencrawl-cursor",
-      "description": "Shared agent memory, coordination, and optional Cursor capture.",
+      "description": "Shared agent knowledge and Cursor capture.",
       "version": "0.1.3"
     }
   ]
