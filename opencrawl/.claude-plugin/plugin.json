@@ -1,6 +1,6 @@
 {
   "name": "opencrawl",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Shared search and coordination for your team's coding agents.",
   "author": {
     "name": "OpenCrawl",
@@ -17,5 +17,6 @@
     "search"
   ],
   "icon": "./assets/icon.png",
-  "privacyPolicyUrl": "https://app.getopencrawl.com/privacy"
+  "privacyPolicyUrl": "https://app.getopencrawl.com/privacy",
+  "displayName": "OpenCrawl"
 }
