@@ -55,8 +55,11 @@ instructions belong in the secure portal, never in the package or repository.
   in Cursor. Check capture receipts and retrieved evidence separately from login.
 - Prepare publisher name/handle, email, logo URL, description, website and
   repository URL for <https://cursor.com/marketplace/publish>.
-- Review those fields and exact repository commit before applying, then address
-  review feedback and verify installation from the live listing.
+- Review those fields, exact repository commit and
+  [Publisher Terms](https://cursor.com/marketplace-publisher-terms) before applying.
+  Submission accepts the terms. Resolve section 3.1's direct/indirect fee wording
+  for any separately paid hosted service before accepting.
+- Address review feedback and verify installation from the live listing.
 
 ## Antigravity
 
@@ -85,9 +88,13 @@ offline JSON Schema validation during preparation if upload has not been approve
 
 ## Additional MCP discovery
 
-- Glama: prepare a server listing for the public core repository and a separate
-  hosted-connector listing where supported; review each final submission. Check
-  whether the connector would use a gateway before choosing that distribution.
+- Glama: the official FAQ documents hourly import of published Streamable HTTP
+  endpoints from the official MCP Registry. Verify the imported hosted connector
+  before making a duplicate submission. Separately review any repository listing,
+  ownership claim or dedicated test-profile authorization. Only healthy connectors
+  appear in search; OAuth client registration alone does not authorize a user.
+  Glama's connector gateway handles credentials and logs tool payloads, so use an
+  isolated review account without customer data if authorizing its test profile.
 - GitHub/VS Code: check eligibility and the actual downstream entry after the
   official registry publication; do not claim automatic listing.
 - PulseMCP: submissions are currently paused; its official page directs authors
@@ -96,13 +103,14 @@ offline JSON Schema validation during preparation if upload has not been approve
   retired on October 31, 2026. Verify the current curated intake route; do not use
   the retired publishing workflow.
 
-## Sources checked November 14, 2026
+## Sources checked November 14–15, 2026
 
 - <https://developers.openai.com/plugins/deploy/submission>
 - <https://claude.com/docs/plugins/submit>
 - <https://claude.com/docs/plugins/pre-submission-checklist>
 - <https://claude.com/docs/connectors/building/submission>
 - <https://cursor.com/docs/reference/plugins>
+- <https://cursor.com/marketplace-publisher-terms>
 - <https://antigravity.google/docs/build-plugins>
 - <https://github.com/modelcontextprotocol/registry/blob/main/docs/modelcontextprotocol-io/authentication.mdx>
 - <https://glama.ai/mcp/faq>
