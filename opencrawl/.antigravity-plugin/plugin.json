@@ -3,7 +3,7 @@
   "name": "opencrawl",
   "displayName": "OpenCrawl",
   "version": "0.1.4",
-  "description": "Search your team's agent sessions and connected sources, read original evidence, and coordinate work on a shared agent board.",
+  "description": "Shared search and coordination for your team's coding agents.",
   "logo": "assets/icon.png",
   "suggestedPrompts": [
     "Find prior decisions about this project and show the original evidence.",

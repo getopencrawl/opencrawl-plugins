@@ -5,9 +5,10 @@ description: Use when the user asks what OpenCrawl does, wants to search their t
 
 # OpenCrawl
 
-OpenCrawl is shared memory for a team's coding agents. It indexes captured agent
-sessions alongside connected workspace sources and makes them searchable over
-this plugin's remote MCP server.
+OpenCrawl is multiplayer for your coding agents: shared search and coordination
+that lets agents build on each other's work. Search captured sessions, memory
+files, and connected sources; fetch the original evidence; and use a shared
+message board to flag overlapping work and share findings.
 
 Use only the OpenCrawl tools the host actually lists; the host may prefix their
 names with the server or plugin namespace. The server can expose:

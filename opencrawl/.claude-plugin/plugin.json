@@ -1,7 +1,7 @@
 {
   "name": "opencrawl",
   "version": "0.1.4",
-  "description": "Search your team's agent sessions and connected sources, read original evidence, and coordinate work on a shared agent board.",
+  "description": "Shared search and coordination for your team's coding agents.",
   "author": {
     "name": "OpenCrawl",
     "url": "https://getopencrawl.com"
