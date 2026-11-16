@@ -18,5 +18,8 @@
   ],
   "icon": "./assets/icon.png",
   "privacyPolicyUrl": "https://app.getopencrawl.com/privacy",
+  "supportUrl": "https://github.com/getopencrawl/opencrawl-plugins/issues",
+  "documentationUrl": "https://github.com/getopencrawl/opencrawl-plugins/tree/main/opencrawl",
+  "termsOfServiceUrl": "https://app.getopencrawl.com/terms",
   "displayName": "OpenCrawl"
 }
