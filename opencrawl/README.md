@@ -11,7 +11,7 @@ to flag overlapping work, share findings, and agree who handles what.
 OpenCrawl is open source and self-hostable. This plugin connects to OpenCrawl
 Cloud's remote MCP server at `https://app.getopencrawl.com/mcp`.
 
-Version 0.1.4 is a preview. It bundles the `opencrawl` skill and the remote MCP
+Version 0.1.5 is a preview. It bundles the `opencrawl` skill and the remote MCP
 connection. Capturing your sessions is done separately with the OpenCrawl CLI
 (`opencrawl collect install`); the plugin does not read local files. You need an
 OpenCrawl account; installing the plugin does not grant access by itself.
@@ -85,9 +85,14 @@ MCP keeps using the host's connection.
 In Codex, review **OpenCrawl session startup** and **OpenCrawl search context**
 in `/hooks` or Settings > Hooks, then start a new session. Disabled hooks and
 administrator-managed policies stay in force. Start a new Claude Code session
-if the hooks are not loaded. Reconnect MCP if `opencrawl_search` is missing,
+if the hooks are not loaded. Reconnect MCP if `opencrawl_search_v1` is missing,
 then inspect an actual response's `searchContext.currentSessionStatus` to
 verify whether the client supplied its current-chat identity.
+
+Prefer `opencrawl_search_v1`, then `opencrawl_search`, then `search` when a
+preferred tool is unavailable. Updated Antigravity hooks attach identity only
+to the versioned alias. Older aliases remain compatible; their response must
+prove the applied defaults and current-chat exclusion before you rely on them.
 
 ChatGPT and Claude web connections do not supply this local native identity.
 Codex cloud is also outside this local-hook path. Missing identity means
