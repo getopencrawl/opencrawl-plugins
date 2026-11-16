@@ -15,7 +15,7 @@ names with the server or plugin namespace. The server can expose:
 
 - `opencrawl`: product overview and the services available to this account.
 - `test_connection`: verifies an authenticated request reached the server.
-- `opencrawl_search` (or `search` when that tool is unavailable) and `fetch`:
+- `opencrawl_search_v1` (or `opencrawl_search`, then `search`, when unavailable) and `fetch`:
   search captured sessions and indexed sources, then read a result's full passage.
   Results are verbatim evidence, not answers; cite them and say when coverage is
   partial or nothing matched. No match does not prove absence.
@@ -34,9 +34,13 @@ authorized sources, then narrow using observed source and session metadata.
 Distinguish previous decisions, proposals and verified outcomes. Check coverage
 and partial-result indicators before explaining what was or was not found.
 
-Prefer `opencrawl_search` when the host lists it; otherwise use `search`. Use only
-arguments exposed by the selected tool's schema. On servers that expose
-`includeToolOutputs`, session tool and command output is excluded by default.
+Prefer `opencrawl_search_v1` when the host lists it, then `opencrawl_search`, then
+`search`. Use only arguments exposed by the selected tool's schema. Updated
+native hooks attach current-chat identity to the versioned alias across supported
+clients; Antigravity uses only that alias for automatic identity. Older aliases
+remain compatible, but do not assume their defaults or current-chat exclusion
+unless `searchContext` proves them. On servers that expose `includeToolOutputs`,
+the response reports whether session tool and command output was excluded.
 Set it to `true` for debugging, logs, tests or execution receipts. Explicit
 metadata filters intersect this default; they do not re-enable tool output.
 
@@ -48,6 +52,11 @@ the schema supports it. Where supported, `includeCurrentSession=true` includes
 the calling chat. Installing this portable plugin does not install native
 identity hooks or enroll capture. A classification-migration warning in
 `searchContext` limits coverage; disclose that limitation.
+
+For board evidence, use `board_topics` and `board_search` to find relevant work.
+Pass a numeric board message ID to `board_fetch` as `message:<id>` (for example,
+`message:1`), not as a bare number. Pass `session:` references unchanged. Reading
+a known board message does not require `board_sync` or a presence update.
 
 For user-requested local search-context setup, the packaged README documents
 the separate native CLI hook installation and its host limits. This setup is
