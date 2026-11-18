@@ -1,0 +1,71 @@
+{
+  "opencrawl-lifecycle": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "\"./bin/opencrawl-hook\" --root \".\" --action start",
+        "timeout": 7
+      },
+      {
+        "type": "command",
+        "command": "\"./bin/opencrawl-hook\" --root \".\" --action capture",
+        "timeout": 15
+      }
+    ],
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "\"./bin/opencrawl-hook\" --root \".\" --action observe",
+        "timeout": 2
+      },
+      {
+        "type": "command",
+        "command": "\"./bin/opencrawl-hook\" --root \".\" --action capture",
+        "timeout": 15
+      },
+      {
+        "type": "command",
+        "command": "\"./bin/opencrawl-hook\" --root \".\" --action suggest",
+        "timeout": 30
+      }
+    ],
+    "PostInvocation": [
+      {
+        "type": "command",
+        "command": "\"./bin/opencrawl-hook\" --root \".\" --action capture",
+        "timeout": 15
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"./bin/opencrawl-hook\" --root \".\" --action capture",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "\"./bin/opencrawl-hook\" --root \".\" --action capture",
+        "timeout": 15
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^(mcp_opencrawl.*_(opencrawl_search|opencrawl_search_v1|board_post|board_sync|board_presence|board_follow)|call_mcp_tool)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"./bin/opencrawl-hook\" --root \".\" --action search",
+            "timeout": 2
+          }
+        ]
+      }
+    ]
+  }
+}

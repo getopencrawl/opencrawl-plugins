@@ -15,10 +15,13 @@ test('packaged executable captures and uploads with CLI, Node and Bun absent fro
   const invoke=(action,event)=>new Promise((resolve,reject)=>{
     const child=execFile(executable,['--root',f.root,'--action',action],{cwd:f.root,env:{...process.env,PATH:join(f.root,'empty-path')},timeout:20000},(error,stdout,stderr)=>{
       if(error||stderr.includes('unavailable'))reject(error??Error(stderr));else resolve(stdout);
-    });child.stdin.end(JSON.stringify(event));
+    });child.stdin.end(JSON.stringify(harness==='antigravity'?{...event,conversationId:event.session_id,transcriptPath:event.transcript_path,hookEventName:event.hook_event_name}:event));
   });
   if(harness==='codex'){
     const rows=[{type:'session_meta',payload:{id:f.event.session_id}},...['user','assistant'].map(role=>({timestamp:new Date().toISOString(),type:'response_item',payload:{type:'message',id:role,role,content:[{type:role==='user'?'input_text':'output_text',text:'COMPILED '+role}]}}))];
+    writeFileSync(f.event.transcript_path,rows.map(r=>JSON.stringify(r)).join('\n')+'\n');
+  }else if(harness==='antigravity'){
+    const rows=['USER_INPUT','PLANNER_RESPONSE'].map((type,i)=>({step_index:i,type,status:'DONE',source:i?'MODEL':'USER_EXPLICIT',content:'COMPILED '+type,created_at:new Date().toISOString()}));
     writeFileSync(f.event.transcript_path,rows.map(r=>JSON.stringify(r)).join('\n')+'\n');
   }else{
     await invoke('observe',{...f.event,hook_event_name:'UserPromptSubmit',prompt_id:'prompt-native',prompt:'COMPILED USER'});
@@ -27,5 +30,5 @@ test('packaged executable captures and uploads with CLI, Node and Bun absent fro
   await invoke('capture',{...f.event,hook_event_name:'Stop'});
   const sent=f.received.filter(r=>r.path==='/api/sessions/batches').flatMap(r=>r.body.events);
   assert.equal(sent.length,2);assert.equal(f.queued().length,0);
-  assert.equal(JSON.parse(readFileSync(join(f.b.profile,'plugin-state',f.b.key,'status.json'))).uploaded,harness==='codex'?1:2);
+  assert.equal(JSON.parse(readFileSync(join(f.b.profile,'plugin-state',f.b.key,'status.json'))).uploaded,harness==='claude-code'?2:1);
 });

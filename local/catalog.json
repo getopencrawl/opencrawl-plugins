@@ -27,7 +27,7 @@
       "harness": "antigravity",
       "name": "opencrawl-local-antigravity",
       "path": "local/antigravity",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "capabilities": "capabilities.json"
     }
   ]

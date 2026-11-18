@@ -1,14 +1,20 @@
 {
   "schemaVersion": 1,
   "harness": "antigravity",
-  "version": "0.1.0",
-  "status": "stub",
+  "version": "0.1.1",
+  "status": "development",
   "cliRequired": false,
-  "callbacks": [],
+  "minimumHarnessVersion": "1.5.9",
+  "callbacks": [
+    "session-start",
+    "capture",
+    "search-context",
+    "context-suggestions"
+  ],
   "capture": {
     "minimum": false,
     "toolInputs": false,
     "toolOutputs": false
   },
-  "daemonHandoff": false
+  "daemonHandoff": true
 }
