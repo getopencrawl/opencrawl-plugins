@@ -65,7 +65,7 @@ test('Codex resolves only an explicitly announced ID when transcript_path is nul
   await assert.rejects(collect(f.b,{...f.event,session_id:'unknown',transcript_path:null}),/not found/);
 });
 
-test('Codex handoff keeps content out of the notice and search rewriting uses the native child ID',async t=>{
+test('Codex handoff keeps content out of the notice and identity validation uses the native child ID',async t=>{
   const f=await fixture(t,'codex');
   atomic(join(f.root,'.opencrawl-binding.json'),{...f.b,captureMode:'daemon'});
   atomic(join(f.b.capture,'config.json'),{...f.config,captureWorker:'daemon-v1'});
@@ -75,6 +75,9 @@ test('Codex handoff keeps content out of the notice and search rewriting uses th
   assert.equal(notice.record.harness,'codex');assert.equal(notice.record.event.transcript_path,f.event.transcript_path);assert.equal(f.received.length,0);
   const e={...f.event,agent_id:'child-1',hook_event_name:'PreToolUse',tool_name:'mcp__opencrawl__opencrawl_search_v1',tool_input:{query:'x',includeCurrentSession:true}};
   const output=search(b,e).hookSpecificOutput;
-  assert.deepEqual(output.updatedInput,{...e.tool_input,currentSession:{harness:'codex',sessionId:'child-1'}});assert.equal(output.permissionDecision,'allow');
+  assert.equal(output.updatedInput,undefined);assert.equal(output.permissionDecision,'deny');
+  assert(output.permissionDecisionReason.includes('child-1'));
+  assert.equal(search(b,{...e,tool_input:{...e.tool_input,currentSession:{harness:'codex',sessionId:'child-1'}}}),undefined);
+  assert.equal(search(b,{...e,tool_name:'mcp__opencrawl__board_sync'}),undefined);
   assert.equal(search(b,{...e,tool_name:'mcp__unrelated__opencrawl_search_v1'}),undefined);
 });

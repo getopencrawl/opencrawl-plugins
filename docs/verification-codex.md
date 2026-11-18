@@ -17,8 +17,10 @@ Node or Bun.
 - The installed archive captured one user message, both assistant replies and
   actual shell input/output in `01a1ec46-3dca-72f2-86f8-8d62e7357dad`. All five
   became searchable through actual core ingestion, indexing and SQLite search.
-- Native MCP search received the correct `currentSession` after PreToolUse in
-  `01a1ec48-4a40-7c31-9a20-950cc70ab893`. The fixture supplied only the query.
+- An earlier candidate injected `currentSession` in native MCP search session
+  `01a1ec48-4a40-7c31-9a20-950cc70ab893`. The final contract instead requires the
+  identity in original arguments, validates it, and leaves reviewed calls
+  unchanged. Legacy board schemas pass through without an undeclared field.
 - An opt-in context fixture marker reached the next native model request and
   its telemetry reached handoff. This checks delivery, not provider quality.
 - Parent `01a1ec49-eb34-7111-a84d-5b4b5fe2da61` and native child

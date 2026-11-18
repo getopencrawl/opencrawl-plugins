@@ -22,10 +22,11 @@ The daemon is useful when a laptop loses connectivity after its last hook.
 Selecting daemon mode does not install or start it. Exclusions and recording
 consent are checked before capture and again before upload.
 
-Context suggestions are separately opt-in. Search hooks only add the native
-session identity to this installation's own same-origin MCP calls. Codex requires
-`permissionDecision: allow` to rewrite arguments; ordinary tool permission checks
-still apply. No PermissionRequest approval hook is installed.
+Context suggestions are separately opt-in. SessionStart supplies the native
+identity for the model to declare in this installation's same-origin MCP calls.
+Hooks validate identity and leave correct arguments unchanged; missing or wrong
+identity is denied without rewriting or approving a call. Legacy board schemas
+use their declared agent field. No PermissionRequest approval hook is installed.
 
 This source folder is not a complete install until built. Run
 `node scripts/package-local.mjs codex` with Node 24 and pinned Bun 1.3.14, or use
