@@ -10,10 +10,13 @@ import {archive} from './package.mts';
 const root=resolve(import.meta.dirname,'..');
 const harness=process.argv[2]??'claude-code';
 assert(['claude-code','codex','cursor','antigravity'].includes(harness),'Unsupported local package');
+const replicas=process.argv[3]==='--replicas';
+assert(process.argv.length<=(replicas?4:3),'Unknown package option');
+assert(!replicas||['claude-code','codex'].includes(harness),'Replicas supports Claude Code and Codex');
 const platform=process.platform+'-'+process.arch;
 const targets={'darwin-arm64':'bun-darwin-arm64','darwin-x64':'bun-darwin-x64','linux-arm64':'bun-linux-arm64','linux-x64':'bun-linux-x64-baseline','win32-x64':'bun-windows-x64-baseline'};
 assert(targets[platform],'Unsupported runtime platform');
-const out=join(root,'dist','local',platform);mkdirSync(out,{recursive:true});
+const out=join(root,'dist',replicas?'replicas':'local',platform);mkdirSync(out,{recursive:true});
 const executable='opencrawl-hook'+(process.platform==='win32'?'.exe':'');
 const binary=join(out,executable);
 const bun=process.env.BUN_EXECUTABLE||'bun';
@@ -38,7 +41,11 @@ try{
 }finally{rmSync(runtimeZip,{force:true});rmSync(runtimeDir,{recursive:true,force:true});}
 const source=['auth.mjs','capture.mjs','io.mjs','lifecycle.mjs','main.mjs','privacy.mjs','redact.mjs','THIRD_PARTY_NOTICES.txt'];
 const manifestPath=(harness==='cursor'?'.cursor-plugin':harness==='antigravity'?'.antigravity-plugin':harness==='codex'?'.codex-plugin':'.claude-plugin')+'/plugin.json';
-const base=[manifestPath,'.mcp.json','mcp.json',...(harness==='antigravity'?['mcp_config.json']:[]),'LICENSE','README.md','capabilities.json','skills/oc-import-memories/SKILL.md','skills/opencrawl/SKILL.md',...(harness==='codex'?['skills/oc-incognito/agents/openai.yaml', 'skills/oc-private/agents/openai.yaml', 'skills/opencrawl-private/agents/openai.yaml', 'skills/oc-readonly/agents/openai.yaml']:[]),'skills/oc-incognito/SKILL.md','skills/oc-private/SKILL.md','skills/opencrawl-private/SKILL.md','skills/oc-readonly/SKILL.md'];
+const skills=['oc-import-memories','opencrawl'];
+const privateSkills=replicas?[]:['oc-incognito','oc-private','opencrawl-private','oc-readonly'];
+const base=[manifestPath,'.mcp.json','mcp.json',...(harness==='antigravity'?['mcp_config.json']:[]),'LICENSE','README.md','capabilities.json',
+  ...[...skills,...privateSkills].map(skill=>'skills/'+skill+'/SKILL.md'),
+  ...(harness==='codex'?privateSkills.map(skill=>'skills/'+skill+'/agents/openai.yaml'):[])];
 const directory=join(root,'local',harness);
 const manifest=JSON.parse(readFileSync(join(directory,manifestPath)));
 const hooksPath=harness==='antigravity'?'hooks.json':'hooks/hooks.json';
@@ -56,7 +63,7 @@ const entries=[...base.map(name=>({name,bytes:readFileSync(join(directory,name))
   ...source.map(name=>({name:'runtime/'+name,bytes:readFileSync(join(root,'local/runtime',name))})),
   {name:hooksPath,bytes:Buffer.from(JSON.stringify(hooks,null,2)+'\n')},
   {name:'bin/'+executable,bytes:readFileSync(binary),executable:true}].sort((a,b)=>a.name.localeCompare(b.name));
-const filename=manifest.name+'-'+manifest.version+'-'+platform+'.zip';
+const filename=manifest.name+(replicas?'-replicas':'')+'-'+manifest.version+'-'+platform+'.zip';
 const bytes=archive(entries),sha256=createHash('sha256').update(bytes).digest('hex');
 writeFileSync(join(out,filename),bytes);
 writeFileSync(join(out,'SHA256SUMS'),sha256+'  '+filename+'\n');

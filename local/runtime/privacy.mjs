@@ -26,10 +26,11 @@ export function invoked(b,e){
     const match=/opencrawl-([a-f0-9]{12}):/.exec(text);
     return !match||hash(b.api).slice(0,12)===match[1];
   };
+  const normalize=text=>b.replicasWorkspace?text.replace('opencrawl-local-'+b.client+':','opencrawl:'):text;
   if(b.client==='claude-code'&&e.hook_event_name==='PreToolUse'&&e.tool_name==='Skill')
-    return typeof e.tool_input?.skill==='string'&&selected.test(e.tool_input.skill)&&scoped(e.tool_input.skill);
+    return typeof e.tool_input?.skill==='string'&&selected.test(normalize(e.tool_input.skill))&&scoped(e.tool_input.skill);
   const text=e.hook_event_name==='UserPromptSubmit'?e.prompt:null;
-  return typeof text==='string'&&[command,link].some(pattern=>{const match=pattern.exec(text.trimStart());return match!==null&&scoped(match[0]);});
+  return typeof text==='string'&&[command,link].some(pattern=>{const match=pattern.exec(normalize(text.trimStart()));return match!==null&&scoped(match[0]);});
 }
 
 export function privateSession(b,id){

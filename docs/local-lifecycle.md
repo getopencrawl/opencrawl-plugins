@@ -104,9 +104,12 @@ probes do not count toward this local acceptance.
 
 ### Verifying ongoing capture in Replicas
 
-Build the candidate on Linux using the pinned Bun version and
-`node scripts/package-local.mjs claude-code` and `node scripts/package-local.mjs codex`.
-Verify the archive and metadata digests. Install the unpacked packages in a
+Build the candidate on Linux using the pinned Bun version and run
+`node scripts/package-local.mjs claude-code --replicas` and
+`node scripts/package-local.mjs codex --replicas`. These archives live under
+`dist/replicas/` and omit the incognito skill and its aliases. An explicit
+incognito command receives a warning. Workspace capture continues for ordinary
+turns. Verify the archive and metadata digests. Install the unpacked packages in a
 workspace-local marketplace. Use the enrolled owner and installation ID in
 each private binding, with `captureMode` set to `hook`. Create that binding
 after the workspace starts so each workspace uses its own identity.
@@ -153,9 +156,10 @@ A process-scoped connection outage in each packaged hook retained a single test
 batch, and a later invocation received the matching upload receipt. Each queue
 drained. Both managed chats ran without an OpenCrawl CLI or daemon.
 
-Incognito stopped capture locally in separate first-prompt tests. The hosted
-board rejected remote erasure for the shared workspace principal with HTTP 403.
-The erasure intent stays pending. The verified content scope covers messages
+At that revision, incognito could pause local capture while the receiver
+rejected workspace erasure with HTTP 403. The current branch disables new
+incognito requests on Replicas and respects pauses recorded by that earlier
+revision. The verified content scope covers messages
 and tool I/O. The test included a native Claude title and no provider sender
 IDs or uploaded files. Codex platform titles, per-sender enrichment and stored
 attachment bytes remain outside this proof.
