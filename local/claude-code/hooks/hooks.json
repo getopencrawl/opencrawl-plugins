@@ -1,0 +1,34 @@
+{
+  "hooks": {
+    "SessionStart": [{"hooks": [
+      {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action start", "timeout": 7},
+      {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action capture", "timeout": 30, "async": true}
+    ]}],
+    "UserPromptSubmit": [{"hooks": [
+      {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action observe", "timeout": 2},
+      {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action capture", "timeout": 30, "async": true},
+      {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action suggest", "timeout": 45, "async": true}
+    ]}],
+    "MessageDisplay": [{"hooks": [
+      {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action observe", "timeout": 2}
+    ]}],
+    "PostToolUse": [{"hooks": [
+      {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action capture", "timeout": 30, "async": true}
+    ]}],
+    "PostToolUseFailure": [{"hooks": [
+      {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action capture", "timeout": 30, "async": true}
+    ]}],
+    "Stop": [{"hooks": [
+      {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action capture", "timeout": 15}
+    ]}],
+    "StopFailure": [{"hooks": [
+      {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action capture", "timeout": 15}
+    ]}],
+    "SessionEnd": [{"hooks": [
+      {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action capture", "timeout": 15}
+    ]}],
+    "PreToolUse": [{"matcher": "^mcp__plugin_.*__(opencrawl_search|opencrawl_search_v1|board_post|board_sync|board_presence|board_follow)$", "hooks": [
+      {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action search", "timeout": 2}
+    ]}]
+  }
+}

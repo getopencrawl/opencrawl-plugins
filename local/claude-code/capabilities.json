@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "harness": "claude-code",
   "version": "0.1.0",
-  "status": "stub",
+  "status": "development",
   "cliRequired": false,
   "callbacks": [],
   "capture": {

@@ -20,10 +20,11 @@ export function crc32(bytes: Buffer) { let crc = 0xffffffff; for (const byte of 
 export function archive(entries: ReadonlyArray<{
     name: string;
     bytes: Buffer;
+    executable?: boolean;
 }>): Buffer {
     const local: Buffer[] = [], central: Buffer[] = [];
     let offset = 0;
-    for (const { name, bytes } of entries) {
+    for (const { name, bytes, executable } of entries) {
         const nameBytes = Buffer.from(name, 'utf8'), compressed = deflateRawSync(bytes, { level: 6 }), crc = crc32(bytes);
         assert(nameBytes.length < 65536 && bytes.length <= 0xffffffff && compressed.length <= 0xffffffff);
         assert.deepEqual(inflateRawSync(compressed), bytes);
@@ -40,7 +41,7 @@ export function archive(entries: ReadonlyArray<{
         c.writeUInt32LE(0x02014b50);
         c.writeUInt16LE((3 << 8) | 20, 4);
         h.copy(c, 6, 4, 30);
-        c.writeUInt32LE((0o100644 << 16) >>> 0, 38);
+        c.writeUInt32LE(((executable ? 0o100755 : 0o100644) << 16) >>> 0, 38);
         c.writeUInt32LE(offset, 42);
         central.push(c, nameBytes);
         local.push(h, nameBytes, compressed);
