@@ -101,3 +101,30 @@ evidence. Tool inputs and outputs are separate coverage tiers. Exercise native
 trust/disable behavior, binding isolation, retries, duplicate invocations and the
 selected daemon/direct mode before marking that harness supported. Cloud agent
 probes do not count toward this local acceptance.
+
+### Verifying ongoing capture in Replicas
+
+Build the branch commit on Linux with the pinned Bun version, using
+`node scripts/package-local.mjs claude-code`. Install that ZIP in a
+workspace-local Claude marketplace. Bind the installed plugin to the enrolled
+workload and the selected native Claude root before creating a new managed chat.
+
+For each of two successive turns in the same chat, ask for a visible sentence,
+one Bash `printf` call with a distinct marker, and a final sentence. After each
+turn, save the output of `replicas read WORKSPACE --chat CHAT --json`. Use its
+`thread_id` to query OpenCrawl with `opencrawl_search_v1` using source
+`sessions`, an empty query, that exact `sessionId`, oldest order,
+`groupBy: "none"`, `dedupe: false` and `includeToolOutputs: true`. Save the
+result JSON with complete excerpts. Compare before sending the next turn:
+
+```sh
+node scripts/verify-replicas-chat.mjs native.json search.json "$WORKLOAD_USER_ID" "$INSTALLATION_ID"
+```
+
+On November 17, 2026, the Linux x64 artifact built from `e2d9ca1` ran in a
+Replicas-managed Claude Code 2.1.327 chat. The first turn matched all five
+content records. After the second, all ten matched in order: two user messages,
+four assistant messages (including both pre-tool replies), two Bash inputs and
+two outputs. The hook uploaded with the workspace identity, and its queue
+drained without an OpenCrawl CLI or daemon. The candidate archive SHA-256 was
+`775ee4e11a9f35876528379225a97907cf8080477667e009be5f98fb59b3897c`.
