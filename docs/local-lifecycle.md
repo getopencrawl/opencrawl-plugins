@@ -104,27 +104,58 @@ probes do not count toward this local acceptance.
 
 ### Verifying ongoing capture in Replicas
 
-Build the branch commit on Linux with the pinned Bun version, using
-`node scripts/package-local.mjs claude-code`. Install that ZIP in a
-workspace-local Claude marketplace. Bind the installed plugin to the enrolled
-workload and the selected native Claude root before creating a new managed chat.
+Build the candidate on Linux using the pinned Bun version and
+`node scripts/package-local.mjs claude-code` and `node scripts/package-local.mjs codex`.
+Verify the archive and metadata digests. Install the unpacked packages in a
+workspace-local marketplace. Use the enrolled owner and installation ID in
+each private binding, with `captureMode` set to `hook`. Create that binding
+after the workspace starts so each workspace uses its own identity.
 
-For each of two successive turns in the same chat, ask for a visible sentence,
-one Bash `printf` call with a distinct marker, and a final sentence. After each
-turn, save the output of `replicas read WORKSPACE --chat CHAT --json`. Use its
-`thread_id` to query OpenCrawl with `opencrawl_search_v1` using source
-`sessions`, an empty query, that exact `sessionId`, oldest order,
-`groupBy: "none"`, `dedupe: false` and `includeToolOutputs: true`. Save the
-result JSON with complete excerpts. Compare before sending the next turn:
+Claude loads the packaged hooks directly. For a headless, admin-managed Codex
+environment, render the same packaged definitions with absolute command paths:
 
 ```sh
-node scripts/verify-replicas-chat.mjs native.json search.json "$WORKLOAD_USER_ID" "$INSTALLATION_ID"
+node scripts/replicas-codex-policy.mjs "$UNPACKED_CODEX_PACKAGE" "$MANAGED_EXECUTABLE" "$BOUND_PLUGIN_ROOT" > managed-hooks.json
 ```
 
-On November 17, 2026, the Linux x64 artifact built from `e2d9ca1` ran in a
-Replicas-managed Claude Code 2.1.327 chat. The first turn matched all five
-content records. After the second, all ten matched in order: two user messages,
-four assistant messages (including both pre-tool replies), two Bash inputs and
-two outputs. The hook uploaded with the workspace identity, and its queue
-drained without an OpenCrawl CLI or daemon. The candidate archive SHA-256 was
-`775ee4e11a9f35876528379225a97907cf8080477667e009be5f98fb59b3897c`.
+Install the verified executable at the root-owned managed path. Keep the private
+binding and package metadata at the binding root. Add the rendered groups to
+system Codex hooks. On an empty Linux workspace, the system file is
+`/etc/codex/hooks.json`, owned by root. In the workspace-specific copy installed
+as a skills and MCP plugin, set `hooks/hooks.json` to `{"hooks":{}}` after
+rendering the managed definitions. This gives each callback one registration.
+Preserve existing system groups and the original archive. Start a new managed
+chat after setup.
+
+For each of two successive turns in the same chat, ask for a visible sentence,
+one shell `printf` call with a distinct marker, and a final sentence. Save
+`replicas read WORKSPACE --chat CHAT --json` after each turn. Query
+`opencrawl_search_v1` with the returned `thread_id` as `sessionId`, source
+`sessions`, an empty query, oldest order, `groupBy: "none"`, `dedupe: false`
+and `includeToolOutputs: true`. Save complete excerpts. Codex also needs the
+matching native rollout for the tool wrapper and complete returned output.
+Compare before sending the next turn.
+
+```sh
+node scripts/verify-replicas-chat.mjs claude.json indexed-claude.json "$WORKLOAD_USER_ID" "$INSTALLATION_ID"
+node scripts/verify-replicas-chat.mjs codex.json indexed-codex.json "$WORKLOAD_USER_ID" "$INSTALLATION_ID" rollout.jsonl
+```
+
+#### Branch verification, November 18, 2026
+
+A clean Replicas environment ran Claude Code 2.1.327 and Codex 0.167.0 against
+the same workspace identity. With runtime source `f2ef1f6`, both matched five
+content records after the first turn and ten after the second: two user
+messages, four assistant messages including both pre-tool replies, two tool
+inputs and two outputs per harness. The Linux x64 executable SHA-256 was
+`07d006dd258963c77fa5e4fdc0e21818e3083d39514ae273631315e8b1e60347`.
+A process-scoped connection outage in each packaged hook retained a single test
+batch, and a later invocation received the matching upload receipt. Each queue
+drained. Both managed chats ran without an OpenCrawl CLI or daemon.
+
+Incognito stopped capture locally in separate first-prompt tests. The hosted
+board rejected remote erasure for the shared workspace principal with HTTP 403.
+The erasure intent stays pending. The verified content scope covers messages
+and tool I/O. The test included a native Claude title and no provider sender
+IDs or uploaded files. Codex platform titles, per-sender enrichment and stored
+attachment bytes remain outside this proof.
