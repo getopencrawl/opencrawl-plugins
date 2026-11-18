@@ -1,14 +1,29 @@
 {
   "schemaVersion": 1,
   "harness": "cursor",
-  "version": "0.1.0",
-  "status": "stub",
+  "version": "0.1.1",
+  "status": "candidate",
   "cliRequired": false,
-  "callbacks": [],
+  "callbacks": [
+    "sessionStart",
+    "beforeSubmitPrompt",
+    "afterAgentResponse",
+    "postToolUse",
+    "postToolUseFailure",
+    "preCompact",
+    "subagentStop",
+    "stop",
+    "sessionEnd",
+    "preToolUse"
+  ],
   "capture": {
     "minimum": false,
     "toolInputs": false,
     "toolOutputs": false
   },
-  "daemonHandoff": false
+  "daemonHandoff": false,
+  "verification": {
+    "native": "pending-sign-in",
+    "runtimePlatforms": []
+  }
 }

@@ -10,6 +10,11 @@ export function wire(event){const e=JSON.parse(JSON.stringify(redact(event)));re
 function pathFor(b,c,event,{mustExist=true}={}){
   if(!isAbsolute(c.roots?.[b.client]??'')||!isAbsolute(event.transcript_path??''))throw Error('Missing native transcript path');
   const base=mustExist?realpathSync(c.roots[b.client]):resolve(c.roots[b.client]),file=mustExist?realpathSync(event.transcript_path):resolve(event.transcript_path),parts=relative(base,file).split(sep);
+  if(b.client==='cursor'){
+    const lexical=relative(resolve(c.roots.cursor),resolve(event.transcript_path));
+    if(parts.length!==5||parts[0]!=='projects'||parts[2]!=='agent-transcripts'||parts[3]!==event.session_id||parts[4]!==event.session_id+'.jsonl'||relative(base,file)!==lexical||mustExist&&lstatSync(event.transcript_path).isSymbolicLink())throw Error('Transcript is outside the selected native session');
+    return file;
+  }
   if(b.client==='antigravity'){
     const tail=['brain',event.session_id,'.system_generated','logs'];
     const prefix=parts.length===6&&['antigravity','antigravity-cli','antigravity-ide'].includes(parts[0])?1:0;
@@ -110,6 +115,7 @@ function queue(b,event,events){
   return id;
 }
 export async function collect(b,event){
+  if(b.client==='cursor')return collectCursor(b,event);
   if(b.client==='codex')return collectCodex(b,event);
   if(b.client==='antigravity')return collectAntigravity(b,event);
   // Child agents do not emit MessageDisplay. Only the exact native parent's
@@ -133,6 +139,104 @@ export async function collect(b,event){
     }
   }
   return result;
+}
+function cursorContent(data){
+  return {...data,content:data.content.map(block=>{
+    const match=data.role==='user'&&block.type==='text'&&typeof block.text==='string'?/^<timestamp>[^\n]*<\/timestamp>\n<user_query>\n([\s\S]*)\n<\/user_query>$/.exec(block.text):null;
+    return match?{...block,text:match[1]}:block;
+  })};
+}
+const cursorCheckpoint=(fd,end)=>{const bytes=Buffer.alloc(Math.min(end,1024)),n=readSync(fd,bytes,0,bytes.length,end-bytes.length);return hash(bytes.subarray(0,n));};
+function cursorHookEvents(notice){
+  const e=notice.event,name=e.nativeHookName??e.hook_event_name;
+  const make=(suffix,kind,data)=>({id:notice.id+suffix,kind,sequence:notice.sequence+(suffix===':result'?1:0),timestamp:notice.at,nativeId:e.tool_use_id??null,turnId:e.generation_id??null,data});
+  if(name==='beforeSubmitPrompt'&&typeof e.prompt==='string')return [make('','message',{role:'user',content:[{type:'text',text:e.prompt}]})];
+  if(name==='afterAgentResponse'&&typeof e.text==='string')return [make('','message',{role:'assistant',content:[{type:'text',text:e.text}]})];
+  if(['postToolUse','postToolUseFailure'].includes(name)&&typeof e.tool_name==='string'){
+    const structured=v=>{if(typeof v!=='string'||!/^\s*[\[{]/.test(v))return v;try{return JSON.parse(v);}catch{return v;}};
+    const call=typeof e.tool_use_id==='string'?{call_id:e.tool_use_id}:{},failed=name==='postToolUseFailure';
+    return [make(':call','tool_call',{type:'tool_use',name:e.tool_name,input:structured(e.tool_input)??null,...call}),make(':result','tool_result',{type:'tool_result',name:e.tool_name,output:failed?e.error_message??'':structured(e.tool_output)??null,...call,...(failed?{is_error:true,failure_type:e.failure_type??'error'}:{})})];
+  }
+  return [];
+}
+/** Cursor omits some content hooks. Reconcile the exact announced JSONL with
+ * callback occurrence counts; never collapse separate identical replies. The
+ * saved boundary and lock are shared with the existing installer/daemon. */
+async function collectCursor(b,event){
+  const c=recording(b,event);if(!c)return {selected:false};
+  const pending=join(b.profile,'plugin-state',b.key,'cursor-notices',hash(event.session_id));
+  const native=event.nativeHookName??event.hook_event_name;
+  // Only genuinely stable native IDs deduplicate callbacks. Text is not identity.
+  const stable=native==='beforeSubmitPrompt'&&nativeId(event.generation_id)?'prompt:'+event.generation_id:['postToolUse','postToolUseFailure'].includes(native)&&nativeId(event.tool_use_id)?native+':'+event.tool_use_id:null;
+  const id=stable?'cursor:'+hash(event.session_id+':'+stable):randomUUID();
+  const receipt=join(pending,hash(id)+'.json');
+  once(receipt,{id,at:new Date().toISOString(),sequence:Math.round((performance.timeOrigin+performance.now())*1000),event:redact(event)});
+  const stateFile=join(b.capture,'state','cursor-'+hash(event.session_id)+'.json');
+  return locked(join(b.profile,hash('capture:cursor:'+event.session_id)+'.json.lock'),async()=>{
+    const state=readJson(stateFile,8*1024*1024,{missing:true})??{offset:0,hooks:{},transcript:{},emitted:{}};
+    state.hooks??={};state.transcript??={};state.emitted??={};state.pluginNotices??={};
+    let events=[];
+    const commit=()=>{queue(b,event,events);atomic(stateFile,state);events=[];};
+    const message=(e,source)=>{
+      e.data=cursorContent(e.data);const key=hash(JSON.stringify([e.data.role,e.data.content]));
+      const count=(state[source][key]??0)+1;state[source][key]=count;
+      if(count<=(state.emitted[key]??0))return;
+      state.emitted[key]=count;
+      if(source==='transcript'){e.sequence=Math.max(e.sequence,(state.lastTranscriptSequence??0)+1);state.lastTranscriptSequence=e.sequence;}
+      events.push(e);
+    };
+    const notices=readdirSync(pending).filter(n=>/^[a-f0-9]{64}\.json$/.test(n)).map(n=>({file:join(pending,n),value:readJson(join(pending,n),8*1024*1024)})).sort((a,b)=>a.value.sequence-b.value.sequence).slice(0,128);
+    for(const {file:noticeFile,value:notice} of notices){
+      if(state.lastNotice===notice.id||state.pluginNotices[notice.id]){unlinkSync(noticeFile);continue;}
+      const e=notice.event;
+      if(e.session_id!==event.session_id)throw Error('Native notice session mismatch');
+      const transcript=e.transcript_path;
+      if(typeof transcript==='string'&&transcript.endsWith('.jsonl')&&existsSync(transcript)){
+        const file=pathFor(b,c,e),fd=openSync(file,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
+        try{
+          const stat=fstatSync(fd),exact=fstatSync(fd,{bigint:true}),identity=exact.dev+':'+exact.ino;
+          if(!stat.isFile()||exact.ino<=0n)throw Error('Native file identity unavailable');
+          if(state.forwardBoundary&&!/^(?:0|[1-9]\d*):[1-9]\d*$/.test(state.identity??''))throw Error('Saved consent boundary identity is unverified');
+          const changed=state.identity&&state.identity!==identity||state.offset>stat.size||state.offset>0&&(!state.checkpoint||state.checkpoint!==cursorCheckpoint(fd,state.offset));
+          // Existing sessions must have an installer boundary. If absent, retain
+          // future-only consent by advancing to EOF without parsing old content.
+          const unknownOld=!state.identity&&!(stat.birthtimeMs>0&&stat.birthtimeMs>=Date.parse(c.installedAt));
+          if(unknownOld||changed&&state.forwardBoundary){
+            state.offset=stat.size;state.forwardBoundary=true;state.hooks={};state.transcript={};state.emitted={};
+            const last=Buffer.alloc(1);if(stat.size)readSync(fd,last,0,1,stat.size-1);state.skipPartial=Boolean(stat.size&&last[0]!==10);
+          }else if(changed){state.offset=0;state.transcript={};}
+          state.identity=identity;state.ino=stat.ino;
+          let position=state.offset,pendingBytes=Buffer.alloc(0);const buffer=Buffer.alloc(65536),deadline=Date.now()+3000;
+          while(position<stat.size&&Date.now()<deadline){
+            const n=readSync(fd,buffer,0,Math.min(buffer.length,stat.size-position),position);if(!n)break;position+=n;pendingBytes=Buffer.concat([pendingBytes,buffer.subarray(0,n)]);
+            let end;while((end=pendingBytes.indexOf(10))>=0){
+              const bytes=pendingBytes.subarray(0,end),start=state.offset;pendingBytes=pendingBytes.subarray(end+1);
+              if(bytes.length>8*1024*1024)throw Error('Native record exceeds limit');
+              if(state.skipPartial)state.skipPartial=false;
+              else{
+                const r=JSON.parse(bytes.toString('utf8'));
+                if(['user','assistant'].includes(r.role)&&Array.isArray(r.message?.content)){
+                  // Attachment references stay references; no file reads.
+                  const content=r.message.content.filter(x=>x?.type==='text'&&typeof x.text==='string');
+                  if(content.length)message({id:hash('cursor-transcript:'+e.session_id+':'+start),kind:'message',sequence:notice.sequence,timestamp:notice.at,nativeId:null,turnId:e.generation_id??null,data:{role:r.role,content}},'transcript');
+                }
+              }
+              state.offset+=end+1;
+              if(events.length>=100){state.checkpoint=cursorCheckpoint(fd,state.offset);commit();}
+            }
+            if(pendingBytes.length>8*1024*1024)throw Error('Native record exceeds limit');
+          }
+          state.checkpoint=cursorCheckpoint(fd,state.offset);
+        }finally{closeSync(fd);}
+      }
+      for(const item of cursorHookEvents(notice))item.kind==='message'?message(item,'hooks'):events.push(item);
+      state.lastNotice=notice.id;
+      if(notice.id.startsWith('cursor:'))state.pluginNotices[notice.id]=true;
+      if(Object.keys(state.pluginNotices).length>50000)throw Error('Native callback limit reached');
+      commit();unlinkSync(noticeFile);
+    }
+    return {selected:true,queued:true,offset:state.offset};
+  },1200);
 }
 function antigravityRows(b,event){
   const c=recording(b,event);if(!c)return;
@@ -311,6 +415,15 @@ async function collectOne(b,event){
 export function handoff(b,event){
   const c=recording(b,event);if(!c)return {selected:false};
   if(c.captureWorker!=='daemon-v1'&&c.claudeCapture!=='daemon-v1')throw Error('Daemon mode is not configured');
+  if(b.client==='cursor'){
+    // Cursor's transcript omits tools on some surfaces: preserve the bounded
+    // native callback payload for the daemon's existing Cursor converter.
+    if(event.transcript_path?.endsWith('.jsonl'))pathFor(b,c,event,{mustExist:false});
+    const id=randomUUID(),at=Date.now(),sequence=Math.round((performance.timeOrigin+performance.now())*1000);
+    const payload=redact({...event,hook_event_name:event.nativeHookName??event.hook_event_name});delete payload.nativeHookName;
+    atomic(join(b.capture,'daemon','inbox',sequence+'-'+id+'.json'),{kind:'capture',id,at,api:b.api,installationId:b.installationId,owner:b.owner,pid:process.ppid,record:{id,at:new Date(at).toISOString(),sequence,harness:b.client,event:payload}});
+    return {selected:true,handoff:true};
+  }
   if(b.client!=='antigravity'&&!['SessionStart','UserPromptSubmit','SessionEnd'].includes(event.hook_event_name))return {selected:true,handoff:false};
   pathFor(b,c,event,{mustExist:false});
   const id=randomUUID(),at=Date.now(),sequence=Math.round((performance.timeOrigin+performance.now())*1000);

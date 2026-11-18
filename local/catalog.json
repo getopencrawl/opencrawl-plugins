@@ -20,7 +20,7 @@
       "harness": "cursor",
       "name": "opencrawl-local-cursor",
       "path": "local/cursor",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "capabilities": "capabilities.json"
     },
     {
