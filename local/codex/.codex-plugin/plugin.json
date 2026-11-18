@@ -1,0 +1,11 @@
+{
+  "name": "opencrawl-local-codex",
+  "version": "0.1.0",
+  "description": "Local lifecycle integration; capture implementation pending.",
+  "author": {
+    "name": "OpenCrawl"
+  },
+  "license": "MIT",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

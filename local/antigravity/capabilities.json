@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "harness": "antigravity",
+  "version": "0.1.0",
+  "status": "stub",
+  "cliRequired": false,
+  "callbacks": [],
+  "capture": {
+    "minimum": false,
+    "toolInputs": false,
+    "toolOutputs": false
+  },
+  "daemonHandoff": false
+}
