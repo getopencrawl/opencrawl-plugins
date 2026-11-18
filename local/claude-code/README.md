@@ -35,6 +35,8 @@ SessionStart supplies the exact `currentSession` object for the model to declare
 in its original search and board arguments. Correct calls pass unchanged;
 missing or incorrect identity is rejected. Hooks never rewrite Claude's reviewed
 arguments, so auto mode reviews the call that actually executes.
+Legacy servers whose board schemas omit `currentSession` use the startup
+receipt's `agent` name instead; those calls are never given undeclared fields.
 
 Coverage is bounded by what Claude emits: private reasoning, opaque attachments,
 and a process killed before a message's final chunk are not complete-message

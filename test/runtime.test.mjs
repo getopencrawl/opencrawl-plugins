@@ -155,6 +155,9 @@ test('Claude validates declared session identity without mutating or approving r
   assert.equal(search(f.b,{...event,tool_input:{...declared,currentSession:{...currentSession,sessionId:'different'}}}).hookSpecificOutput.permissionDecision,'deny');
   for(const tool of ['board_post','board_sync','board_presence','board_follow']){
     const board={...event,tool_name:'mcp__plugin_opencrawl-deployment_oc-local__'+tool};
+    atomic(join(f.b.profile,'board',hash(f.b.api)+'.capabilities.json'),{board:1});
+    assert.equal(search(f.b,board),undefined);
+    atomic(join(f.b.profile,'board',hash(f.b.api)+'.capabilities.json'),{board:2});
     assert.equal(search(f.b,board).hookSpecificOutput.permissionDecision,'deny');
     assert.equal(search(f.b,{...board,tool_input:declared}),undefined);
   }
