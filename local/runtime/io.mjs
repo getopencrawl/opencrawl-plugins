@@ -62,7 +62,7 @@ export function excluded(c,session,cwd){
 }
 export function recording(b,event){
   const c=enrollment(b),id=event.session_id;
-  if(!nativeId(id)||c.disabled||!c.harnesses?.includes(b.client)||excluded(c,id,event.cwd))return;
+  if(!nativeId(id)||c.disabled||!c.harnesses?.includes(b.client)||excluded(c,id,event.cwd)||event.parentSessionId&&excluded(c,event.parentSessionId,event.cwd))return;
   return c;
 }
 export async function locked(file,operation,timeout=5000){

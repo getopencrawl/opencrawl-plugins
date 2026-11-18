@@ -14,13 +14,15 @@ You need an OpenCrawl account; sign up at [getopencrawl.com](https://getopencraw
 To run OpenCrawl yourself instead, see
 [opencrawl-core](https://github.com/getopencrawl/opencrawl-core).
 
-**Portable 0.1.5 and Cursor 0.1.3 are review candidates, not approved directory listings.** Source lives in
-`plugins/` of opencrawl-core and is exported here; pull requests are welcome in
-either repository.
+**Portable 0.1.5 and Cursor 0.1.3 are review candidates, not approved directory listings.**
+The portable packages are exported from `plugins/` in opencrawl-core. Standalone
+local lifecycle packages are developed and released in this repository.
 
 - [Install and use the plugin](opencrawl/README.md)
 - [Authentication and devices](docs/authentication.md)
 - [Directory publication](docs/directories.md)
+- [Standalone local lifecycle plugins](docs/local-lifecycle.md): complete native
+  archives with CLI-free hooks, optional capture and optional daemon handoff.
 
 ## Build and validate
 

@@ -1,0 +1,137 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action start",
+            "timeout": 7,
+            "statusMessage": "OpenCrawl session startup"
+          },
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action capture",
+            "timeout": 30,
+            "statusMessage": "OpenCrawl session capture",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action observe",
+            "timeout": 2,
+            "statusMessage": "OpenCrawl session capture"
+          },
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action capture",
+            "timeout": 30,
+            "statusMessage": "OpenCrawl session capture",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action suggest",
+            "timeout": 45,
+            "statusMessage": "OpenCrawl context suggestions",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostModelRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action capture",
+            "timeout": 30,
+            "statusMessage": "OpenCrawl session capture",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action capture",
+            "timeout": 30,
+            "statusMessage": "OpenCrawl session capture",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action capture",
+            "timeout": 30,
+            "statusMessage": "OpenCrawl session capture",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action capture",
+            "timeout": 15,
+            "statusMessage": "OpenCrawl session capture"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action capture",
+            "timeout": 3,
+            "statusMessage": "OpenCrawl session capture"
+          }
+        ]
+      }
+    ],
+    "Interrupt": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action capture",
+            "timeout": 3,
+            "statusMessage": "OpenCrawl session capture"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^mcp__.*__(opencrawl_search(_v1)?|board_post|board_sync|board_presence|board_follow)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action search",
+            "timeout": 2,
+            "statusMessage": "OpenCrawl search context"
+          }
+        ]
+      }
+    ]
+  }
+}

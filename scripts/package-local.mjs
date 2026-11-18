@@ -8,6 +8,8 @@ import {createHash} from 'node:crypto';
 import {archive} from './package.mts';
 
 const root=resolve(import.meta.dirname,'..');
+const harness=process.argv[2]??'claude-code';
+assert(['claude-code','codex'].includes(harness),'Unsupported local package');
 const platform=process.platform+'-'+process.arch;
 const targets={'darwin-arm64':'bun-darwin-arm64','darwin-x64':'bun-darwin-x64','linux-arm64':'bun-linux-arm64','linux-x64':'bun-linux-x64-baseline','win32-x64':'bun-windows-x64-baseline'};
 assert(targets[platform],'Unsupported runtime platform');
@@ -35,13 +37,15 @@ try{
   execFileSync(bun,arguments_,{stdio:'inherit'});
 }finally{rmSync(runtimeZip,{force:true});rmSync(runtimeDir,{recursive:true,force:true});}
 const source=['auth.mjs','capture.mjs','io.mjs','lifecycle.mjs','main.mjs','redact.mjs','THIRD_PARTY_NOTICES.txt'];
-const base=['.claude-plugin/plugin.json','.mcp.json','mcp.json','LICENSE','README.md','capabilities.json','skills/opencrawl/SKILL.md'];
-const directory=join(root,'local','claude-code');
-const manifest=JSON.parse(readFileSync(join(directory,'.claude-plugin/plugin.json')));
+const manifestPath=(harness==='codex'?'.codex-plugin':'.claude-plugin')+'/plugin.json';
+const base=[manifestPath,'.mcp.json','mcp.json','LICENSE','README.md','capabilities.json','skills/opencrawl/SKILL.md'];
+const directory=join(root,'local',harness);
+const manifest=JSON.parse(readFileSync(join(directory,manifestPath)));
 const hooks=JSON.parse(readFileSync(join(directory,'hooks/hooks.json')));
 if(process.platform==='win32')for(const groups of Object.values(hooks.hooks))for(const group of groups)for(const hook of group.hooks){
   const action=hook.command.match(/--action ([a-z]+)$/)[1];
-  hook.command='& "$env:CLAUDE_PLUGIN_ROOT\\bin\\opencrawl-hook.exe" --root "$env:CLAUDE_PLUGIN_ROOT" --action '+action;
+  const variable=harness==='codex'?'PLUGIN_ROOT':'CLAUDE_PLUGIN_ROOT';
+  hook.command='& "$env:'+variable+'\\bin\\opencrawl-hook.exe" --root "$env:'+variable+'" --action '+action;
   hook.shell='powershell';
 }
 const entries=[...base.map(name=>({name,bytes:readFileSync(join(directory,name))})),
@@ -52,5 +56,5 @@ const filename=manifest.name+'-'+manifest.version+'-'+platform+'.zip';
 const bytes=archive(entries),sha256=createHash('sha256').update(bytes).digest('hex');
 writeFileSync(join(out,filename),bytes);
 writeFileSync(join(out,'SHA256SUMS'),sha256+'  '+filename+'\n');
-writeFileSync(join(out,'artifact.json'),JSON.stringify({schemaVersion:1,harness:'claude-code',name:manifest.name,version:manifest.version,platform,filename,sha256,executable:'bin/'+executable,source:source.map(n=>'runtime/'+n)},null,2)+'\n');
+writeFileSync(join(out,'artifact.json'),JSON.stringify({schemaVersion:1,harness,name:manifest.name,version:manifest.version,platform,filename,sha256,executable:'bin/'+executable,source:source.map(n=>'runtime/'+n)},null,2)+'\n');
 console.log(filename+': '+sha256);

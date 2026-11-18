@@ -1,11 +1,12 @@
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {binding,enrollment,recording,atomic} from './io.mjs';
-import {collect,handoff,flush,observe} from './capture.mjs';
+import {collect,handoff,handoffCodex,flush,observe} from './capture.mjs';
 import {start,search,suggest,notePrompt} from './lifecycle.mjs';
 export async function invoke(root,action,event,output=process.stdout){
   const b=binding(root);enrollment(b);
   if(!event||typeof event!=='object'||Array.isArray(event))throw Error('Invalid hook input');
+  if(b.client==='codex'&&event.hook_event_name==='UserPromptSubmit')event={...event,prompt_id:event.turn_id};
   let result;
   if(action==='observe'){await observe(b,event);await notePrompt(b,event);return;}
   else if(action==='start')result=await start(b,event);
@@ -15,7 +16,7 @@ export async function invoke(root,action,event,output=process.stdout){
     if(suggestion?.output){suggestion.guard();await new Promise((resolve,reject)=>output.write(JSON.stringify(suggestion.output)+'\n',error=>error?reject(error):resolve()));suggestion.handoff();}
     await suggestion?.flush();return;
   }else if(action==='capture'){
-    if(b.captureMode==='daemon')result=handoff(b,event);
+    if(b.captureMode==='daemon')result=b.client==='codex'?await handoffCodex(b,event):handoff(b,event);
     else{
       if(!recording(b,event))result={selected:false};
       else{
