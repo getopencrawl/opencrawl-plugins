@@ -74,7 +74,7 @@ export async function locked(file,operation,timeout=5000){
   db.exec('PRAGMA busy_timeout=0');let acquired=false,published;
   const deadline=Date.now()+timeout;
   try{
-    while(!acquired){try{db.exec('BEGIN IMMEDIATE');acquired=true;}catch(error){if(!/locked|busy/i.test(error.message)||Date.now()>=deadline)throw Error('State busy');await new Promise(r=>setTimeout(r,30));}}
+    while(!acquired){try{db.exec('BEGIN IMMEDIATE');acquired=true;}catch(error){if(!/locked|busy/i.test(error.message))throw error;if(Date.now()>=deadline)throw Error('State busy');await new Promise(r=>setTimeout(r,30));}}
     // Older CLI versions additionally use this PID marker. Never displace a
     // live owner. Current CLI versions hold the same SQLite transaction.
     for(;;){

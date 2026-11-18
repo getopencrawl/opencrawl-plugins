@@ -38,21 +38,22 @@ export async function suggest(b,event){
   const key=hash(JSON.stringify([event.session_id,event.prompt_id])),dir=join(b.profile,'plugin-state',b.key,'suggestions'),state=join(dir,key+'.json'),outbox=join(dir,'events');
   let reports=[];
   const report=(stage,details={})=>{const e={id:randomUUID(),at:new Date().toISOString(),harness:b.client,eventKey:key,sessionHash:hash(event.session_id),stage,...details};reports.push(e);atomic(join(outbox,e.id+'.json'),e);};
-  let result;
+  let result,phase='lock';
   try{
     result=await locked(state+'.lock',async()=>{
+      phase='selection';
       if(readJson(state,32768,{missing:true}))return;
       const revision=selected.s.revision;
       const guard=()=>{const now=settings(b);if(!now||now.s.revision!==revision||excluded(now.c,event.session_id,event.cwd))throw Error('Context selection changed');};
       guard();report('observed');
-      await request(b,'/api/sessions/identity',{identity:true,refresh:true});guard();
+      phase='identity';await request(b,'/api/sessions/identity',{identity:true,refresh:true});guard();
       // Persist before the billable operation. An ambiguous failure is never
       // retried as a new check by a duplicate native hook.
-      atomic(state,{status:'requested',at:new Date().toISOString()});report('requested',{replay:false});
+      phase='reserve';atomic(state,{status:'requested',at:new Date().toISOString()});report('requested',{replay:false});
       const began=Date.now(),message=redact(event.prompt).slice(0,8000);
-      const value=await request(b,'/api/context/suggestions',{method:'POST',body:{eventId:event.prompt_id,currentSession:{harness:b.client,sessionId:event.session_id},role:'user',message,task:message,context:[],timestamp:new Date().toISOString()},refresh:true,timeout:25000,guard});
+      phase='request';const value=await request(b,'/api/context/suggestions',{method:'POST',body:{eventId:event.prompt_id,currentSession:{harness:b.client,sessionId:event.session_id},role:'user',message,task:message,context:[],timestamp:new Date().toISOString()},refresh:true,timeout:25000,guard});
       guard();
-      if(!Array.isArray(value.results)||value.results.length>5||!Number.isInteger(value.outputTokens)||value.outputTokens<0||value.outputTokens>1600)throw Error('Invalid context response');
+      phase='response';if(!Array.isArray(value.results)||value.results.length>5||!Number.isInteger(value.outputTokens)||value.outputTokens<0||value.outputTokens>1600)throw Error('Invalid context response');
       const results=value.results.map(r=>{if(typeof r.id!=='string'||r.id.length>300||typeof r.title!=='string'||r.title.length>1000||typeof r.text!=='string'||r.text.length>8000||!Number.isInteger(r.offset)||r.offset<0)throw Error('Invalid context result');return {id:r.id,title:r.title,text:r.text,offset:r.offset,...(typeof r.url==='string'&&/^https?:\/\//.test(r.url)?{url:r.url}:{})};});
       const checkId=/^[a-f0-9-]{36}$/.test(value.checkId??'')?value.checkId:undefined;
       report('received',{...(checkId?{checkId}:{}),results:results.length,outputTokens:value.outputTokens,latencyMs:Math.min(30000,Date.now()-began),replay:false});
@@ -62,7 +63,7 @@ export async function suggest(b,event){
       if(Buffer.byteLength(text)>16000)throw Error('Context response exceeds output limit');
       return {output:{hookSpecificOutput:{hookEventName:'UserPromptSubmit',additionalContext:text}},handoff:()=>report('handoff',{...(checkId?{checkId}:{}),results:results.length})};
     },500);
-  }catch(error){report('dropped',{reason:'unavailable'});result={diagnostic:{name:error.name,code:error.code??null}};}
+  }catch(error){report('dropped',{reason:'unavailable'});result={diagnostic:{phase,name:error.name,code:error.code??null,sqliteCode:error.errcode??null}};}
   return {...result,flush:async()=>{
     if(!existsSync(outbox)||!settings(b))return;
     const files=readdirSync(outbox).filter(n=>/^[a-f0-9-]+\.json$/.test(n));
