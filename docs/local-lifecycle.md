@@ -60,8 +60,8 @@ The platform receipt is `artifact.json`:
 
 ```json
 {"schemaVersion":1,"harness":"claude-code","name":"opencrawl-local-claude-code",
- "version":"0.1.0","platform":"darwin-arm64",
- "filename":"opencrawl-local-claude-code-0.1.0-darwin-arm64.zip",
+ "version":"0.1.1","platform":"darwin-arm64",
+ "filename":"opencrawl-local-claude-code-0.1.1-darwin-arm64.zip",
  "sha256":"<archive SHA-256>","executable":"bin/opencrawl-hook",
  "source":["runtime/main.mjs"]}
 ```

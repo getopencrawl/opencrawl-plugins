@@ -1,6 +1,6 @@
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {binding,enrollment,atomic} from './io.mjs';
+import {binding,enrollment,recording,atomic} from './io.mjs';
 import {collect,handoff,flush,observe} from './capture.mjs';
 import {start,search,suggest,notePrompt} from './lifecycle.mjs';
 export async function invoke(root,action,event,output=process.stdout){
@@ -16,7 +16,15 @@ export async function invoke(root,action,event,output=process.stdout){
     await suggestion?.flush();return;
   }else if(action==='capture'){
     if(b.captureMode==='daemon')result=handoff(b,event);
-    else{result=await collect(b,event);if(result.selected){try{result.uploaded=await flush(b);}catch{result.pendingUpload=true;}}}
+    else{
+      if(!recording(b,event))result={selected:false};
+      else{
+        // Native display/prompt receipts remain uploadable if a tool transcript
+        // is temporarily missing, malformed or larger than the read bound.
+        try{result=await collect(b,event);}catch(error){result={selected:true,pendingRead:true,errorCode:error.code??'TRANSCRIPT_UNAVAILABLE'};}
+        try{result.uploaded=await flush(b);}catch{result.pendingUpload=true;}
+      }
+    }
     atomic(join(b.profile,'plugin-state',b.key,'status.json'),{at:new Date().toISOString(),harness:b.client,...result});return;
   }else throw Error('Unsupported lifecycle action');
   if(result)output.write(JSON.stringify(result)+'\n');

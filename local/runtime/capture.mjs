@@ -28,14 +28,15 @@ function sourceEvent(b,record,offset){
 const observations=(b,session)=>join(b.profile,'plugin-state',b.key,'observed',hash(session));
 /** Fast local receipt: no authentication, network, transcript reads or CLI. */
 export async function observe(b,event){
-  if(b.captureMode!=='hook'||!recording(b,event))return;
+  const c=recording(b,event);if(b.captureMode!=='hook'||!c)return;
+  pathFor(b,c,event,{mustExist:false});
   const dir=observations(b,event.session_id);
   if(event.hook_event_name==='UserPromptSubmit'){
     if(!nativeId(event.prompt_id)||typeof event.prompt!=='string')throw Error('Missing native prompt identity');
     const file=join(dir,'users',event.prompt_id+'.json');
     const receipt=once(file,{at:new Date().toISOString(),prompt:redact(event.prompt)});
-    if(receipt.prompt!==redact(event.prompt))throw Error('Native prompt identity reused');
-    queue(b,event,[{id:'claude-prompt:'+event.prompt_id,kind:'message',nativeId:event.prompt_id,timestamp:receipt.at,sequence:Date.parse(receipt.at)*1000,data:{role:'user',content:receipt.prompt,captureSource:'native-prompt'}}]);
+    if((receipt.promptHash??hash(receipt.prompt))!==hash(redact(event.prompt)))throw Error('Native prompt identity reused');
+    finishPrompt(b,event,event.prompt_id,receipt);
     return;
   }
   if(event.hook_event_name!=='MessageDisplay')return;
@@ -44,6 +45,12 @@ export async function observe(b,event){
   const receipt=once(join(messageDir,event.index+'.json'),{at:new Date().toISOString(),turn:event.turn_id,delta:redact(event.delta),final:event.final});
   if(receipt.turn!==event.turn_id||receipt.delta!==redact(event.delta)||receipt.final!==event.final)throw Error('Native message chunk conflict');
   finishMessage(b,event,event.message_id);
+}
+function finishPrompt(b,event,id,receipt){
+  if(receipt.queued)return;
+  const batch=queue(b,event,[{id:'claude-prompt:'+id,kind:'message',nativeId:id,timestamp:receipt.at,sequence:Date.parse(receipt.at)*1000,data:{role:'user',content:receipt.prompt,captureSource:'native-prompt'}}]);
+  // The immutable queue now owns the content. Keep only replay metadata here.
+  atomic(join(observations(b,event.session_id),'users',id+'.json'),{at:receipt.at,promptHash:hash(receipt.prompt),queued:true,batch});
 }
 function finishMessage(b,event,id){
   const dir=join(observations(b,event.session_id),'messages',id);
@@ -96,6 +103,8 @@ export async function collect(b,event){
 }
 async function collectOne(b,event){
   const c=recording(b,event);if(!c)return {selected:false};
+  const users=join(observations(b,event.session_id),'users');
+  if(existsSync(users))for(const name of readdirSync(users).filter(n=>n.endsWith('.json')&&nativeId(n.slice(0,-5))))finishPrompt(b,event,name.slice(0,-5),readJson(join(users,name),8*1024*1024));
   const messages=join(observations(b,event.session_id),'messages');
   if(existsSync(messages))for(const id of readdirSync(messages).filter(nativeId))finishMessage(b,event,id);
   const dir=join(b.profile,'plugin-state',b.key),stateFile=join(dir,hash(event.session_id)+'.json');
@@ -110,7 +119,9 @@ async function collectOne(b,event){
         const stat=fstatSync(fd),identity=String(stat.dev)+':'+String(stat.ino);
         if(!stat.isFile()||stat.size<offset||state.fileIdentity&&state.fileIdentity!==identity)throw Error('Native transcript replaced; checkpoint retained');
         state.fileIdentity=identity;
-        const length=Math.min(stat.size-offset,8*1024*1024),bytes=Buffer.alloc(length);readSync(fd,bytes,0,length,offset);
+        const deadline=Date.now()+3000;
+        while(offset<stat.size&&Date.now()<deadline){
+        const prior=offset,length=Math.min(stat.size-offset,8*1024*1024),bytes=Buffer.alloc(length);readSync(fd,bytes,0,length,offset);
         let start=0;
         while(start<bytes.length){
           const end=bytes.indexOf(10,start);if(end<0)break;
@@ -136,6 +147,9 @@ async function collectOne(b,event){
           }
           offset+=end-start+1;start=end+1;
           if(events.length>=100){queue(b,event,events);events=[];}
+        }
+        queue(b,event,events);events=[];state.offset=offset;atomic(stateFile,state);
+        if(offset===prior){if(length===8*1024*1024)throw Error('Native transcript record exceeds limit');break;}
         }
       }finally{closeSync(fd);}
     }
@@ -169,7 +183,9 @@ export async function flush(b){
       const guard=()=>{const now=enrollment(b);if(now.disabled||!now.harnesses?.includes(b.client)||excluded(now,batch.sessionId,batch.cwd))throw Error('Recording selection changed');};
       const receipt=await request(b,'/api/sessions/batches',{method:'POST',body:bytes,timeout:8000,refresh:true,guard});
       if(receipt.stored!==true||receipt.batchId!==hash(bytes))throw Error('Invalid capture receipt');
-      atomic(join(b.profile,'plugin-state',b.key,'last-upload.json'),{at:new Date().toISOString(),...receipt,harness:b.client,installationId:b.installationId,sessionId:batch.sessionId});
+      const savedReceipt={at:new Date().toISOString(),...receipt,harness:b.client,installationId:b.installationId,sessionId:batch.sessionId};
+      atomic(join(b.profile,'plugin-state',b.key,'last-upload.json'),savedReceipt);
+      atomic(join(b.capture,'last-upload.json'),savedReceipt);
       unlinkSync(file);count++;if(count===8)break;
     }
     return count;

@@ -1,7 +1,7 @@
 {
   "name": "opencrawl-local-claude-code",
-  "version": "0.1.0",
-  "description": "Local lifecycle integration; capture implementation pending.",
+  "version": "0.1.1",
+  "description": "CLI-free lifecycle capture, session identity and optional context for Claude Code.",
   "author": {
     "name": "OpenCrawl"
   },

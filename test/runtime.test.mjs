@@ -13,13 +13,15 @@ export async function fixture(t){
   const root=mkdtempSync(join(tmpdir(),'opencrawl-hooks-test-'));
   t.after(()=>rmSync(root,{recursive:true,force:true}));
   const received=[],owner={tenantId:'tenant-test',userId:'user-test'};
-  let behavior={owner,fail:false,afterIdentity:undefined,beforeSuggestion:undefined};
+  let behavior={owner,fail:false,afterIdentity:undefined,beforeSuggestion:undefined,refreshes:0};
   const server=createServer(async(req,res)=>{
     let raw='';for await(const c of req)raw+=c;
-    const body=raw?JSON.parse(raw):undefined;
+    const body=raw?(req.headers['content-type']==='application/x-www-form-urlencoded'?Object.fromEntries(new URLSearchParams(raw)):JSON.parse(raw)):undefined;
     received.push({path:req.url,auth:req.headers.authorization,body,raw});
     res.setHeader('content-type','application/json');
-    if(req.url==='/api/sessions/identity'){
+    if(req.url==='/token'){
+      behavior.refreshes++;res.end(JSON.stringify({access_token:'fixture-refreshed',refresh_token:'fixture-rotated',expires_in:3600}));
+    }else if(req.url==='/api/sessions/identity'){
       res.end(JSON.stringify({data:{principal:behavior.owner}}));behavior.afterIdentity?.();
     }else if(behavior.fail){res.statusCode=503;res.end('{}');}
     else if(req.url==='/api/sessions/batches')res.end(JSON.stringify({data:{stored:true,batchId:hash(raw),eventCount:body.events.length}}));
@@ -182,4 +184,31 @@ test('child assistant messages come from the exact parent subtree without Messag
   assert.equal(batches[0].origin,'subagent');assert.equal(batches[0].parentSessionId,event.session_id);
   assert.equal(batches[0].sessionId,event.session_id+':child1');assert.equal(batches[0].events.length,2);
   await assert.rejects(collect(b,{...event,hook_event_name:'SubagentStop',agent_id:'child1',agent_transcript_path:child.replace('session-1','other-session')}),/native parent/);
+});
+
+test('simultaneous hooks rotate a saved credential only once under the shared lock',async t=>{
+  const f=await fixture(t),file=join(f.b.profile,hash(f.b.api)+'.json');
+  atomic(file,{accessToken:'fixture-expired',expiresAt:0,refreshToken:'fixture-refresh',auth:{clientId:'fixture-client',tokenEndpoint:f.b.api+'/token'}});
+  const [one,two]=await Promise.all([request(f.b,'/api/sessions/identity',{refresh:true}),request(f.b,'/api/sessions/identity',{refresh:true})]);
+  assert.deepEqual(one.principal,f.b.owner);assert.deepEqual(two.principal,f.b.owner);
+  assert.equal(f.behavior.refreshes,1);
+  const saved=JSON.parse(readFileSync(file));assert.equal(saved.refreshToken,'fixture-rotated');
+  assert(f.received.filter(r=>r.path==='/api/sessions/identity').every(r=>r.auth==='Bearer fixture-refreshed'));
+});
+
+test('a prompt receipt survives a process exit before queue publication',async t=>{
+  const f=await fixture(t),id='pending-prompt';
+  const at=new Date().toISOString();
+  atomic(join(f.b.profile,'plugin-state',f.b.key,'observed',hash(f.event.session_id),'users',id+'.json'),{at,prompt:'DURABLE USER'});
+  await collect(f.b,f.event);
+  await observe(f.b,{...f.event,hook_event_name:'UserPromptSubmit',prompt_id:id,prompt:'DURABLE USER'});
+  const events=f.queued().flatMap(b=>b.events);assert.equal(events.length,1);assert.equal(events[0].data.content,'DURABLE USER');
+});
+
+test('a single final callback drains multiple bounded transcript chunks',async t=>{
+  const f=await fixture(t),payload='x'.repeat(65536);
+  const rows=Array.from({length:140},(_,i)=>({type:'assistant',uuid:'tool-'+i,sessionId:f.event.session_id,timestamp:new Date().toISOString(),message:{role:'assistant',content:[{type:'tool_use',id:'tool-'+i,name:'Example',input:{value:payload}}]}}));
+  appendFileSync(f.event.transcript_path,rows.map(r=>JSON.stringify(r)).join('\n')+'\n');
+  await collect(f.b,{...f.event,hook_event_name:'Stop'});
+  assert.equal(f.queued().flatMap(b=>b.events).length,140);
 });
