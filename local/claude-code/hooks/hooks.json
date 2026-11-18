@@ -30,7 +30,7 @@
     "SessionEnd": [{"hooks": [
       {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action capture", "timeout": 15}
     ]}],
-    "PreToolUse": [{"matcher": "^mcp__plugin_.*__(opencrawl_search|opencrawl_search_v1|board_post|board_sync|board_presence|board_follow)$", "hooks": [
+    "PreToolUse": [{"matcher": "^Skill$", "hooks": [{"type":"command","command":"\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action privacy","timeout":15}]},{"matcher": "^mcp__plugin_.*__(opencrawl_search|opencrawl_search_v1|board_post|board_sync|board_presence|board_follow)$", "hooks": [
       {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action search", "timeout": 2}
     ]}]
   }

@@ -3,6 +3,7 @@ import {readdirSync,unlinkSync,existsSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {request} from './auth.mjs';
 import {hash,atomic,readJson,enrollment,nativeId,object,locked,excluded} from './io.mjs';
+import {privateSession} from './privacy.mjs';
 import {redact} from './redact.mjs';
 export async function start(b,event){
   if(event.hook_event_name!=='SessionStart'||!nativeId(event.session_id))return;
@@ -88,7 +89,7 @@ export async function suggest(b,event){
       const stored=readJson(state,32768);
       if(!['observed','skipped'].includes(stored.status))return;
       if(stored.status==='skipped'){atomic(state,{...stored,status:'finished'});report('observed');report('skipped',{reason:'capacity'});return;}
-      const guard=()=>{const now=settings(b);if(!now||now.s.revision!==revision||excluded(now.c,event.session_id,event.cwd)||readJson(task.latest,32768)?.key!==task.key||Date.now()-task.created>=120000)throw Error('Context selection changed');};
+      const guard=()=>{const now=settings(b);if(privateSession(b,event.session_id)||!now||now.s.revision!==revision||excluded(now.c,event.session_id,event.cwd)||readJson(task.latest,32768)?.key!==task.key||Date.now()-task.created>=120000)throw Error('Context selection changed');};
       guard();report('observed');
       phase='identity';await request(b,'/api/sessions/identity',{identity:true,refresh:true});guard();
       // Persist before the billable operation. An ambiguous failure is never

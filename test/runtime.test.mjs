@@ -193,3 +193,26 @@ test('a single final callback drains multiple bounded transcript chunks',async t
   await collect(f.b,{...f.event,hook_event_name:'Stop'});
   assert.equal(f.queued().flatMap(b=>b.events).length,140);
 });
+
+test('private invocation purges this chat, retries offline and denies board tools after resume',async t=>{
+  const {invoke}=await import('../local/runtime/main.mjs');
+  const {privateSession,invoked}=await import('../local/runtime/privacy.mjs');
+  const f=await fixture(t),{b,event}=f;
+  const prompt={...event,hook_event_name:'UserPromptSubmit',prompt_id:'earlier',prompt:'Earlier private capture'};
+  await observe(b,prompt);assert.equal(f.queued().length,1);
+  for(const name of ['oc-private','opencrawl-private','oc-readonly','oc-incognito']){
+    assert(invoked(b,{...prompt,prompt:'/opencrawl:'+name}));
+    assert(!invoked(b,{...prompt,prompt:'document $'+name}));
+    assert(!invoked(b,{...prompt,hook_event_name:'PostToolUse',prompt:'/'+name}));
+  }
+  f.behavior.fail=true;
+  const activate={...prompt,prompt_id:'activate',prompt:'/oc-readonly'};
+  await invoke(f.root,'capture',activate);
+  assert(privateSession(b,event.session_id));assert(!privateSession(b,event.session_id+'-other'));assert.equal(f.queued().length,0);
+  f.behavior.fail=false;
+  await invoke(f.root,'capture',{...event,hook_event_name:'Stop'});
+  assert(f.received.some(r=>r.path==='/api/board/incognito'&&r.body.currentSession.sessionId===event.session_id));
+  assert(!f.received.some(r=>r.path==='/api/sessions/batches'));
+  const out=[];await invoke(f.root,'search',{...event,hook_event_name:'PreToolUse',tool_name:'mcp__plugin_opencrawl_opencrawl__board_post',tool_input:{}},{write:value=>out.push(JSON.parse(value))});
+  assert.equal(out[0].hookSpecificOutput.permissionDecision,'deny');
+});
