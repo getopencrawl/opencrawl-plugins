@@ -45,6 +45,16 @@ Cursor converts native content in the standalone hook in both modes and hands
 its immutable queue to the worker for durable upload. It does not enroll Cursor
 child transcripts into the older worker's independent transcript reader.
 
+For direct capture in a Replicas workspace, the installer can set
+`authMode` to `replicas-workspace` in the private binding. At enrollment, get
+a token from `/usr/local/bin/replicas identity token --audience <api-origin>`
+and use the tenant and workload user returned by that origin's
+`/api/sessions/identity` for both the binding and capture configuration.
+Keep that token in memory. Each hook that needs a credential can mint a fresh
+one. Queued batches remain bound to the original installation and workload.
+The receiving API verifies the token and workspace connection on upload.
+Human attribution, when available, is separate event metadata.
+
 Configure native MCP to the same explicit origin's `/mcp`, using the harness's
 normal authorization flow. Source packages contain an empty MCP configuration
 until bound; never add a second cloud MCP entry to a self-host installation.

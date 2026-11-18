@@ -42,7 +42,12 @@ export function binding(root){
   if(!object(b)||b.schemaVersion!==1||!['claude-code','codex','cursor','antigravity'].includes(b.client)||!isAbsolute(b.configHome??'')||!nativeId(b.installationId)||!object(b.owner)||!nativeId(b.owner.tenantId)||!nativeId(b.owner.userId)||!['hook','daemon'].includes(b.captureMode))throw Error('Invalid plugin binding');
   if(origin(b.api)!==b.api)throw Error('Origin must be normalized');
   const profile=join(b.configHome,'opencrawl'),capture=join(profile,'capture');
-  return {...b,root,profile,capture,key:hash(JSON.stringify([b.api,b.installationId,b.owner,b.client]))};
+  const keyParts=[b.api,b.installationId,b.owner,b.client];
+  if(b.authMode!==undefined){
+    if(b.authMode!=='replicas-workspace'||b.captureMode!=='hook'||!/^workload_replicas_[a-f0-9]{64}$/.test(b.owner.userId))throw Error('Invalid workload enrollment');
+    keyParts.push(b.authMode);
+  }
+  return {...b,root,profile,capture,key:hash(JSON.stringify(keyParts))};
 }
 export function enrollment(b){
   const current=binding(b.root);

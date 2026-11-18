@@ -1,4 +1,6 @@
 import {join} from 'node:path';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {hash,readJson,atomic,locked,enrollment,origin} from './io.mjs';
 const sessionFile=b=>join(b.profile,hash(b.api)+'.json');
 function saved(b){
@@ -15,8 +17,40 @@ async function json(response,limit=4*1024*1024){
 function owner(b,data){
   if(data?.principal?.tenantId!==b.owner.tenantId||data?.principal?.userId!==b.owner.userId)throw Error('Authenticated owner changed');
 }
+const execute=promisify(execFile);
+async function mintWorkspaceToken(api){
+  try{
+    const {stdout}=await execute('/usr/local/bin/replicas',['identity','token','--audience',api],{timeout:6000,maxBuffer:32768,encoding:'utf8'});
+    return stdout.trim();
+  }catch{throw Error('Replicas workspace identity unavailable');}
+}
+
+// Cache only in this hook process. The API verifies the signature, organization
+// connection and capture permission. Local checks catch a mismatched workspace
+// before a queued transcript leaves the machine.
+export function replicasCredentials(mint=mintWorkspaceToken){
+  const cache=new WeakMap();
+  return async function credential(b,rejected){
+    const previous=cache.get(b);
+    if(previous&&previous.refreshAt>Date.now()&&previous.value!==rejected)return previous.value;
+    const value=await mint(b.api);
+    try{
+      const parts=value.split('.');
+      if(parts.length!==3||value.length>16384)throw Error();
+      const claims=JSON.parse(Buffer.from(parts[1],'base64url').toString('utf8'));
+      const issuer='https://api.replicas.dev';
+      if(claims.iss!==issuer||claims.aud!==b.api||!Number.isFinite(claims.exp)||claims.exp*1000<=Date.now())throw Error();
+      const subject='org:'+claims.organization_id+':env:'+claims.environment_id+':workspace:'+claims.workspace_id;
+      if(claims.sub!==subject||b.owner.userId!=='workload_replicas_'+hash(issuer+'\n'+subject))throw Error();
+      cache.set(b,{value,refreshAt:claims.exp*1000-5000});
+      return value;
+    }catch{throw Error('Invalid Replicas workspace credential');}
+  };
+}
+const workspaceToken=replicasCredentials();
 export async function token(b,{rejected,refresh=false}={}){
   enrollment(b);
+  if(b.authMode==='replicas-workspace')return workspaceToken(b,rejected);
   const usable=s=>s.expiresAt>Date.now()+30000&&s.accessToken!==rejected;
   let s=saved(b);if(usable(s))return s.accessToken;
   if(!refresh)throw Error('Sign-in needs attention');
@@ -37,15 +71,18 @@ export async function token(b,{rejected,refresh=false}={}){
 export async function request(b,path,{method='GET',body,refresh=false,timeout=6000,identity=false,guard=()=>{}}={}){
   if(!path.startsWith('/api/'))throw Error('Invalid API path');
   enrollment(b);let credential=await token(b,{refresh});
-  const check=()=>{enrollment(b);guard();if(saved(b).accessToken!==credential)throw Error('Configured credential changed');};
+  const check=()=>{enrollment(b);guard();if(!b.authMode&&saved(b).accessToken!==credential)throw Error('Configured credential changed');};
   const send=(url,options={})=>{check();return fetch(b.api+url,{redirect:'error',signal:AbortSignal.timeout(timeout),...options,headers:{authorization:'Bearer '+credential,...options.headers}});};
   for(let attempt=0;attempt<2;attempt++){
     // Authorize the exact credential used for content egress. A refresh or
     // concurrent sign-in must never redirect old content to a different owner.
-    let response=await send('/api/sessions/identity');
-    if(response.status===401&&refresh&&attempt===0){await response.body?.cancel();credential=await token(b,{rejected:credential,refresh:true});continue;}
-    const identification=await json(response);owner(b,identification.data);check();
-    if(path==='/api/sessions/identity')return identification.data;
+    let response;
+    if(b.authMode!=='replicas-workspace'||path!=='/api/sessions/batches'){
+      response=await send('/api/sessions/identity');
+      if(response.status===401&&refresh&&attempt===0){await response.body?.cancel();credential=await token(b,{rejected:credential,refresh:true});continue;}
+      const identification=await json(response);owner(b,identification.data);check();
+      if(path==='/api/sessions/identity')return identification.data;
+    }
     response=await send(path,{method,...(body===undefined?{}:{headers:{'content-type':'application/json'},body:typeof body==='string'?body:JSON.stringify(body)})});
     if(response.status===401&&refresh&&attempt===0){await response.body?.cancel();credential=await token(b,{rejected:credential,refresh:true});continue;}
     const result=await json(response);check();

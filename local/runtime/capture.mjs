@@ -109,7 +109,7 @@ function finishMessage(b,event,id){
 function queue(b,event,events){
   if(!events.length)return;
   if(!recording(b,event))throw Error('Recording no longer selected');
-  const batch=redact({schemaVersion:1,owner:b.owner,installationId:b.installationId,host:hostname(),harness:b.client,origin:event.parentSessionId?'subagent':'cli',...(event.parentSessionId?{parentSessionId:event.parentSessionId}:{}),sessionId:event.session_id,cwd:event.cwd,captureMode:'live',events:events.map(wire),attachments:[]});
+  const batch=redact({schemaVersion:1,owner:b.owner,installationId:b.installationId,host:hostname(),harness:b.client,origin:event.parentSessionId?'subagent':b.authMode==='replicas-workspace'?'cloud':'cli',...(event.parentSessionId?{parentSessionId:event.parentSessionId}:{}),sessionId:event.session_id,cwd:event.cwd,captureMode:'live',events:events.map(wire),attachments:[]});
   // Scope fields are not secret-shaped free text and must remain exact.
   batch.owner=b.owner;batch.installationId=b.installationId;batch.sessionId=event.session_id;batch.cwd=event.cwd;
   const bytes=JSON.stringify(batch);if(Buffer.byteLength(bytes)>16*1024*1024)throw Error('Capture batch exceeds limit');
@@ -470,7 +470,7 @@ export async function handoffCodex(b,event){
 import {privateSession} from './privacy.mjs';
 export async function flush(b){
   return locked(join(b.profile,hash('capture:flush')+'.json.lock'),async()=>{
-    await request(b,'/api/sessions/identity',{identity:true,refresh:true});
+    if(b.authMode!=='replicas-workspace')await request(b,'/api/sessions/identity',{identity:true,refresh:true});
     const directory=join(b.capture,'queue');if(!existsSync(directory))return 0;
     let count=0;
     for(const name of readdirSync(directory).filter(n=>/^[a-f0-9]{64}\.json$/.test(n)).slice(0,64)){
