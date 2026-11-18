@@ -2,17 +2,17 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {binding,enrollment,atomic} from './io.mjs';
 import {collect,handoff,flush,observe} from './capture.mjs';
-import {start,search,suggest} from './lifecycle.mjs';
+import {start,search,suggest,notePrompt} from './lifecycle.mjs';
 export async function invoke(root,action,event,output=process.stdout){
   const b=binding(root);enrollment(b);
   if(!event||typeof event!=='object'||Array.isArray(event))throw Error('Invalid hook input');
   let result;
-  if(action==='observe'){await observe(b,event);return;}
+  if(action==='observe'){await observe(b,event);await notePrompt(b,event);return;}
   else if(action==='start')result=await start(b,event);
   else if(action==='search')result=search(b,event);
   else if(action==='suggest'){
     const suggestion=await suggest(b,event);
-    if(suggestion?.output){await new Promise((resolve,reject)=>output.write(JSON.stringify(suggestion.output)+'\n',error=>error?reject(error):resolve()));suggestion.handoff();}
+    if(suggestion?.output){suggestion.guard();await new Promise((resolve,reject)=>output.write(JSON.stringify(suggestion.output)+'\n',error=>error?reject(error):resolve()));suggestion.handoff();}
     await suggestion?.flush();return;
   }else if(action==='capture'){
     if(b.captureMode==='daemon')result=handoff(b,event);

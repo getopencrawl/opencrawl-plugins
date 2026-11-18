@@ -7,13 +7,13 @@ import {createServer} from 'node:http';
 import {binding,atomic,hash,excluded} from '../local/runtime/io.mjs';
 import {observe,collect,flush,handoff} from '../local/runtime/capture.mjs';
 import {request} from '../local/runtime/auth.mjs';
-import {search,suggest} from '../local/runtime/lifecycle.mjs';
+import {search,suggest,notePrompt} from '../local/runtime/lifecycle.mjs';
 
 export async function fixture(t){
   const root=mkdtempSync(join(tmpdir(),'opencrawl-hooks-test-'));
   t.after(()=>rmSync(root,{recursive:true,force:true}));
   const received=[],owner={tenantId:'tenant-test',userId:'user-test'};
-  let behavior={owner,fail:false,afterIdentity:undefined};
+  let behavior={owner,fail:false,afterIdentity:undefined,beforeSuggestion:undefined};
   const server=createServer(async(req,res)=>{
     let raw='';for await(const c of req)raw+=c;
     const body=raw?JSON.parse(raw):undefined;
@@ -23,7 +23,7 @@ export async function fixture(t){
       res.end(JSON.stringify({data:{principal:behavior.owner}}));behavior.afterIdentity?.();
     }else if(behavior.fail){res.statusCode=503;res.end('{}');}
     else if(req.url==='/api/sessions/batches')res.end(JSON.stringify({data:{stored:true,batchId:hash(raw),eventCount:body.events.length}}));
-    else if(req.url==='/api/context/suggestions')res.end(JSON.stringify({data:{results:[{id:'source1',title:'Evidence',text:'A prior result',offset:0}],outputTokens:10,checkId:'12345678-1234-1234-1234-123456789abc'}}));
+    else if(req.url==='/api/context/suggestions'){await behavior.beforeSuggestion?.();res.end(JSON.stringify({data:{results:[{id:'source1',title:'Evidence',text:'A prior result',offset:0}],outputTokens:10,checkId:'12345678-1234-1234-1234-123456789abc'}}));}
     else if(req.url==='/api/context/suggestions/events')res.end(JSON.stringify({data:{accepted:body.events.map(e=>e.id)}}));
     else{res.statusCode=404;res.end('{}');}
   });
@@ -145,4 +145,26 @@ test('search identity only rewrites this installed deployment MCP and preserves 
   assert.deepEqual(result.hookSpecificOutput.updatedInput,{...input,currentSession:{harness:'claude-code',sessionId:f.event.session_id}});
   assert(!result.hookSpecificOutput.permissionDecision);
   assert.equal(search(f.b,{...event,tool_name:'mcp__plugin_different_oc-local__opencrawl_search_v1'}),undefined);
+});
+
+test('a newer native prompt prevents stale context delivery and carries bounded prior user context',async t=>{
+  const f=await fixture(t),one={...f.event,hook_event_name:'UserPromptSubmit',prompt_id:'one',prompt:'Original task'};
+  atomic(join(f.b.profile,'context-checks',hash(f.b.api)+'.json'),{...f.config,revision:'revision-1'});
+  const two={...one,prompt_id:'two',prompt:'New follow-up'};
+  f.behavior.beforeSuggestion=async()=>{await notePrompt(f.b,two);};
+  const old=await suggest(f.b,one);assert(!old.output);
+  f.behavior.beforeSuggestion=undefined;
+  const next=await suggest(f.b,two);assert(next.output);
+  const inputs=f.received.filter(r=>r.path==='/api/context/suggestions').map(r=>r.body);
+  assert.equal(inputs.length,2);assert.equal(inputs[1].task,'Original task');
+  assert.deepEqual(inputs[1].context,[{role:'user',text:'Original task'}]);
+});
+
+test('context admission caps concurrent checks and never turns skipped replay into a charge',async t=>{
+  const f=await fixture(t),e={...f.event,hook_event_name:'UserPromptSubmit',prompt:'Task'};
+  atomic(join(f.b.profile,'context-checks',hash(f.b.api)+'.json'),{...f.config,revision:'revision-1'});
+  await notePrompt(f.b,{...e,prompt_id:'one'});await notePrompt(f.b,{...e,prompt_id:'two'});
+  const three={...e,prompt_id:'three'};await notePrompt(f.b,three);
+  assert(!(await suggest(f.b,three)).output);assert(!(await suggest(f.b,three)).output);
+  assert.equal(f.received.filter(r=>r.path==='/api/context/suggestions').length,0);
 });
