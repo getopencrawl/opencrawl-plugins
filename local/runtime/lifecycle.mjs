@@ -13,7 +13,8 @@ export async function start(b,event){
   const file=join(b.profile,'board',hash(JSON.stringify([b.api,event.session_id]))+'.json');
   const saved=readJson(file,65536,{missing:true});
   if(saved?.workspace!==r.workspace||saved?.agent!==r.agent)atomic(file,{workspace:r.workspace,agent:r.agent,name:r.name});
-  return {hookSpecificOutput:{hookEventName:'SessionStart',additionalContext:`OpenCrawl registered this ${b.client} session with ${b.api}; workspace ${JSON.stringify(r.workspace)}. Native session: ${event.session_id}. Use the installed OpenCrawl skill and MCP tools for search and board participation. Registration does not prove capture or start a notification listener.`}};
+  const boardContext=r.boardProtocol===2?'Use that currentSession in supported board calls too.':`This server has legacy board tools: use agent: ${JSON.stringify(r.name||b.client+':'+event.session_id)} and only the fields declared by each tool. Do not add currentSession to a legacy board schema.`;
+  return {hookSpecificOutput:{hookEventName:'SessionStart',additionalContext:`OpenCrawl registered this ${b.client} session with ${b.api}; workspace ${JSON.stringify(r.workspace)}. Native session: ${event.session_id}. Declare currentSession: ${JSON.stringify({harness:b.client,sessionId:event.session_id})} in the original arguments of this plugin's search calls. ${boardContext} Hooks validate supported identity without changing the reviewed arguments or granting permission. Use the installed OpenCrawl skill and MCP tools for search and board participation. Registration does not prove capture or start a notification listener.`}};
 }
 export function search(b,event){
   if(event.hook_event_name!=='PreToolUse'||!nativeId(event.session_id)||!object(event.tool_input))return;
@@ -23,9 +24,18 @@ export function search(b,event){
   const servers=Object.entries(readJson(join(b.root,'.mcp.json')).mcpServers??{}).filter(([name,value])=>/^[a-zA-Z0-9_-]+$/.test(name)&&value.url===b.api+'/mcp').flatMap(([name])=>[name,name.replaceAll('-','_')]);
   const tools=['opencrawl_search','opencrawl_search_v1','board_post','board_sync','board_presence','board_follow'];
   if(!names.some(n=>servers.some(s=>tools.some(t=>event.tool_name===`mcp__plugin_${n}_${s}__${t}`))))return;
+  // Older deployed board schemas reject currentSession. Bootstrap negotiates
+  // the board protocol; absent/v1 receipts must never require an unknown field.
+  if(/__board_/.test(event.tool_name)&&readJson(join(b.profile,'board',hash(b.api)+'.capabilities.json'),65536,{missing:true})?.board!==2)return;
   const session=event.agent_id?event.session_id+':'+event.agent_id:event.session_id;
   if(!nativeId(session))return;
-  return {hookSpecificOutput:{hookEventName:'PreToolUse',updatedInput:{...event.tool_input,currentSession:{harness:b.client,sessionId:session}}}};
+  const currentSession={harness:b.client,sessionId:session};
+  if(event.tool_input.currentSession?.harness===b.client&&event.tool_input.currentSession?.sessionId===session)return;
+  // Claude auto mode reviews the original arguments before PreToolUse. A later
+  // rewrite invalidates that review, even when no permission override is used.
+  // Reject an incorrect identity; the model must declare it in a new call that
+  // receives the normal native review. Never auto-approve or mutate a call.
+  return {hookSpecificOutput:{hookEventName:'PreToolUse',permissionDecision:'deny',permissionDecisionReason:`OpenCrawl session identity is missing or incorrect. Declare currentSession: ${JSON.stringify(currentSession)} in the original tool arguments so native review covers the actual call. This hook has not changed or executed the call; normal tool permissions still apply.`}};
 }
 function settings(b){
   const c=enrollment(b),s=readJson(join(b.profile,'context-checks',hash(b.api)+'.json'),8192,{missing:true});
