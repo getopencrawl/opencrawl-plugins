@@ -102,7 +102,7 @@
           {
             "type": "command",
             "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action capture",
-            "timeout": 15,
+            "timeout": 3,
             "statusMessage": "OpenCrawl session capture"
           }
         ]

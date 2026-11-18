@@ -31,6 +31,14 @@ test('Codex captures every published message and tools, excludes provenance-mark
   f.behavior.fail=false;await flush(f.b);assert.equal(f.queued().length,0);
 });
 
+test('Codex child notifications keep their native automation attribution',async t=>{
+  const f=await fixture(t,'codex'),automated=message('n','user','Child finished');
+  automated.payload.internal_chat_message_metadata_passthrough={content_item_kinds:['multi_agent.subagent_notification'],content_item_metadata:[{provenance:{type:'tool',namespace:'multi_agent_v1'}}]};
+  append(f.event.transcript_path,[header(f.event.session_id),automated,message('u','user','<subagent_notification>This is user text</subagent_notification>')]);
+  await collect(f.b,f.event);const events=f.queued()[0].events;
+  assert.equal(events[0].kind,'automation_message');assert.equal(events[1].kind,'message');
+});
+
 test('Codex native header and child parent must match before reading message content',async t=>{
   const f=await fixture(t,'codex');
   append(f.event.transcript_path,[header('different'),message('u','user','PRIVATE')]);

@@ -35,6 +35,7 @@ function sourceEvent(b,record,offset){
           const keep=r.content.map((_,i)=>i).filter(i=>!(kinds[i]==='agents_md.instructions'&&items[i]?.provenance?.type==='agents_md')&&!(kinds[i]==='environments.environment_context'&&items[i]?.provenance?.type==='harness'));
           if(!keep.length)return;
           data={...r,content:keep.map(i=>r.content[i]),internal_chat_message_metadata_passthrough:{...meta,content_item_kinds:keep.map(i=>kinds[i]),content_item_metadata:keep.map(i=>items[i])}};
+          if(keep.every(i=>kinds[i]==='multi_agent.subagent_notification'&&items[i]?.provenance?.type==='tool'))kind='automation_message';
         }
       }else if(/call|tool/.test(r.type??'')){kind=/output|result/.test(r.type)?'tool_result':'tool_call';data=r;}
     }else if(record.type==='event_msg'&&r?.type==='item_completed'&&r.item?.type==='McpToolCall'){kind='mcp_tool_call_end';data=r;}
