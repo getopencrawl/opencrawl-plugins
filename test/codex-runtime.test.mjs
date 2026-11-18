@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {appendFileSync,writeFileSync,readFileSync,mkdirSync,readdirSync} from 'node:fs';
 import {join,dirname} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
-import {fixture} from './runtime.test.mjs';
+import {fixture} from './fixture.mjs';
 import {atomic,binding} from '../local/runtime/io.mjs';
 import {collect,flush,handoffCodex} from '../local/runtime/capture.mjs';
 import {search} from '../local/runtime/lifecycle.mjs';

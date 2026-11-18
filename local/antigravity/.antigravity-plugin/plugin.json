@@ -1,7 +1,7 @@
 {
   "name": "opencrawl-local-antigravity",
-  "version": "0.1.0",
-  "description": "Local lifecycle integration; capture implementation pending.",
+  "version": "0.1.1",
+  "description": "CLI-free native session capture, identity and optional context for Antigravity.",
   "author": {
     "name": "OpenCrawl"
   },

@@ -10,6 +10,12 @@ export function wire(event){const e=JSON.parse(JSON.stringify(redact(event)));re
 function pathFor(b,c,event,{mustExist=true}={}){
   if(!isAbsolute(c.roots?.[b.client]??'')||!isAbsolute(event.transcript_path??''))throw Error('Missing native transcript path');
   const base=mustExist?realpathSync(c.roots[b.client]):resolve(c.roots[b.client]),file=mustExist?realpathSync(event.transcript_path):resolve(event.transcript_path),parts=relative(base,file).split(sep);
+  if(b.client==='antigravity'){
+    const tail=['brain',event.session_id,'.system_generated','logs'];
+    const prefix=parts.length===6&&['antigravity','antigravity-cli','antigravity-ide'].includes(parts[0])?1:0;
+    if(parts.length!==prefix+5||!tail.every((v,i)=>parts[prefix+i]===v)||!['transcript.jsonl','transcript_full.jsonl'].includes(parts.at(-1)))throw Error('Transcript is outside the selected native session');
+    return file;
+  }
   if(b.client==='codex'){
     const name=parts.at(-1),location=parts.length===5&&parts[0]==='sessions'&&/^\d{4}$/.test(parts[1])&&/^\d{2}$/.test(parts[2])&&/^\d{2}$/.test(parts[3])||parts.length===2&&parts[0]==='archived_sessions';
     if(!location||!name.startsWith('rollout-')||!name.endsWith('-'+event.session_id+'.jsonl'))throw Error('Transcript is outside the selected native session');
@@ -105,6 +111,7 @@ function queue(b,event,events){
 }
 export async function collect(b,event){
   if(b.client==='codex')return collectCodex(b,event);
+  if(b.client==='antigravity')return collectAntigravity(b,event);
   // Child agents do not emit MessageDisplay. Only the exact native parent's
   // subtree (or the explicit matching SubagentStop path) can enroll a child.
   const c=recording(b,event);if(!c)return {selected:false};
@@ -126,6 +133,77 @@ export async function collect(b,event){
     }
   }
   return result;
+}
+function antigravityRows(b,event){
+  const c=recording(b,event);if(!c)return;
+  let file=pathFor(b,c,event);
+  if(file.endsWith(sep+'transcript.jsonl')){
+    const full=join(dirname(file),'transcript_full.jsonl');
+    if(existsSync(full))file=pathFor(b,c,{...event,transcript_path:full});
+  }
+  const fd=openSync(file,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
+  try{
+    const before=fstatSync(fd);
+    if(!before.isFile()||before.size>64*1024*1024)throw Error('Native snapshot exceeds limit');
+    const bytes=readFileSync(fd),after=fstatSync(fd);
+    if(before.size!==bytes.length||before.size!==after.size||before.mtimeMs!==after.mtimeMs)throw Error('Native snapshot changed during read');
+    const lines=bytes.toString('utf8').split('\n');
+    // A partial trailing record is retried at the next lifecycle boundary.
+    lines.pop();
+    return {c,rows:lines.filter(Boolean).map(line=>{
+      if(Buffer.byteLength(line)>8*1024*1024)throw Error('Native record exceeds limit');
+      const r=JSON.parse(line);
+      if(!Number.isSafeInteger(r.step_index)||r.step_index<0)throw Error('Missing native step identity');
+      return r;
+    })};
+  }finally{closeSync(fd);}
+}
+function antigravityText(raw){
+  if(typeof raw!=='string')return '';
+  const wrapped=/^<USER_REQUEST>\r?\n([\s\S]*?)\r?\n<\/USER_REQUEST>(?:\s|$)/.exec(raw);
+  return wrapped?wrapped[1]:raw;
+}
+/** Identify the latest explicit native user step; repeated text is not identity. */
+export function antigravityPrompt(b,event){
+  if(event.hookEventName!=='PreInvocation'||typeof event.lastUserInput!=='string')return;
+  const snapshot=antigravityRows(b,event);if(!snapshot)return;
+  const r=snapshot.rows.findLast(r=>r.type==='USER_INPUT');
+  if(!r||r.source!=='USER_EXPLICIT'||r.status!=='DONE'||antigravityText(r.content).trim()!==event.lastUserInput.trim())return;
+  return {prompt_id:'agy-step-'+r.step_index,prompt:antigravityText(r.content)};
+}
+async function collectAntigravity(b,event){
+  const selected=recording(b,event);if(!selected)return {selected:false};
+  const stateFile=join(b.profile,'plugin-state',b.key,hash(event.session_id)+'.json');
+  return locked(stateFile+'.lock',async()=>{
+    const snapshot=antigravityRows(b,event);if(!snapshot)return {selected:false};
+    const state=readJson(stateFile,8*1024*1024,{missing:true})??{steps:{}};
+    let events=[];
+    for(const r of snapshot.rows){
+      if(!['DONE','ERROR'].includes(r.status))continue;
+      // Native snapshots can be replaced/compacted; stable step IDs survive.
+      // Timestamp is mandatory for forward-only consent on an existing session.
+      const timestamp=r.created_at??r.timestamp;
+      if(!Number.isFinite(Date.parse(timestamp))||Date.parse(timestamp)<Date.parse(snapshot.c.installedAt))continue;
+      const base={id:'agy-step:'+r.step_index,sequence:r.step_index,timestamp,nativeId:String(r.step_index),parentId:null,turnId:null,agentId:null};
+      const parsed=[];
+      if(r.type==='USER_INPUT'&&typeof r.content==='string')parsed.push({...base,kind:r.source==='USER_EXPLICIT'?'message':'automation_message',data:r.source==='USER_EXPLICIT'?{role:'user',content:antigravityText(r.content)}:{source:r.source,content:r.content}});
+      if(r.type==='PLANNER_RESPONSE'){
+        if(typeof r.content==='string'&&r.content.trim())parsed.push({...base,kind:'message',data:{role:'assistant',content:r.content}});
+        if(Array.isArray(r.tool_calls))for(const [i,tool] of r.tool_calls.entries())if(typeof tool?.name==='string')parsed.push({...base,id:base.id+':tool:'+i,kind:'tool_call',data:{type:'tool_use',name:tool.name,input:tool.args??tool.input??{},...(typeof tool.id==='string'?{id:tool.id}:{})}});
+      }
+      if(r.type==='GENERIC'&&(typeof r.content==='string'||r.status==='ERROR'))parsed.push({...base,kind:'tool_result',data:{type:'tool_result',output:r.content??r.error??'',...(r.status==='ERROR'?{is_error:true}:{} )}});
+      for(const e of parsed){
+        const digest=wire(e).id;
+        if(state.steps[e.id]===digest)continue;
+        events.push(e);
+        // Persist checkpoint only after the immutable queue owns the content.
+        if(events.length>=100){queue(b,event,events);for(const item of events)state.steps[item.id]=wire(item).id;events=[];atomic(stateFile,state);}
+      }
+    }
+    if(Object.keys(state.steps).length+events.length>50000)throw Error('Native session step limit reached');
+    queue(b,event,events);for(const e of events)state.steps[e.id]=wire(e).id;atomic(stateFile,state);
+    return {selected:true,queued:true,steps:Object.keys(state.steps).length};
+  },1200);
 }
 async function codexEvent(b,event){
   const c=recording(b,event);if(!c)return;
@@ -233,10 +311,10 @@ async function collectOne(b,event){
 export function handoff(b,event){
   const c=recording(b,event);if(!c)return {selected:false};
   if(c.captureWorker!=='daemon-v1'&&c.claudeCapture!=='daemon-v1')throw Error('Daemon mode is not configured');
-  if(!['SessionStart','UserPromptSubmit','SessionEnd'].includes(event.hook_event_name))return {selected:true,handoff:false};
+  if(b.client!=='antigravity'&&!['SessionStart','UserPromptSubmit','SessionEnd'].includes(event.hook_event_name))return {selected:true,handoff:false};
   pathFor(b,c,event,{mustExist:false});
   const id=randomUUID(),at=Date.now(),sequence=Math.round((performance.timeOrigin+performance.now())*1000);
-  const payload={session_id:event.session_id,cwd:event.cwd,transcript_path:event.transcript_path,hook_event_name:event.hook_event_name};
+  const payload=b.client==='antigravity'?{conversationId:event.session_id,cwd:event.cwd,workspacePaths:[event.cwd],transcriptPath:event.transcript_path,hookEventName:event.hookEventName}:{session_id:event.session_id,cwd:event.cwd,transcript_path:event.transcript_path,hook_event_name:event.hook_event_name};
   if(!recording(b,event))return {selected:false};
   atomic(join(b.capture,'daemon','inbox',sequence+'-'+id+'.json'),{kind:'capture',id,at,api:b.api,installationId:b.installationId,owner:b.owner,pid:process.ppid,record:{id,at:new Date(at).toISOString(),sequence,harness:b.client,event:payload}});
   return {selected:true,handoff:true};
