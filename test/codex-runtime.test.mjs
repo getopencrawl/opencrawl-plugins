@@ -81,3 +81,19 @@ test('Codex handoff keeps content out of the notice and identity validation uses
   assert.equal(search(b,{...e,tool_name:'mcp__opencrawl__board_sync'}),undefined);
   assert.equal(search(b,{...e,tool_name:'mcp__unrelated__opencrawl_search_v1'}),undefined);
 });
+
+test('Replicas Codex captures executed calls without uploading the startup tool catalog',async t=>{
+  const f=await fixture(t,'codex');
+  const owner={tenantId:f.b.owner.tenantId,userId:'workload_replicas_'+'a'.repeat(64)};
+  const bound=JSON.parse(readFileSync(join(f.root,'.opencrawl-binding.json')));
+  atomic(join(f.root,'.opencrawl-binding.json'),{...bound,owner});
+  atomic(join(f.b.capture,'config.json'),{...f.config,owner});
+  append(f.event.transcript_path,[header(f.event.session_id),
+    row({type:'additional_tools',role:'developer',tools:[{name:'tool inventory'}]}),
+    row({type:'custom_tool_call',name:'exec',call_id:'c1',input:'actual call'}),
+    row({type:'custom_tool_call_output',call_id:'c1',output:'actual output'})]);
+  await collect(binding(f.root),f.event);
+  const batches=f.queued();
+  assert(batches.every(batch=>batch.origin==='cloud'));
+  assert.deepEqual(batches.flatMap(batch=>batch.events.map(event=>event.kind)),['tool_call','tool_result']);
+});

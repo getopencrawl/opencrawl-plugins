@@ -40,6 +40,8 @@ function sourceEvent(b,record,offset){
   if(b.client==='codex'){
     const r=record.payload;
     if(record.type==='response_item'&&r){
+      // Replicas includes the available tool definitions in its native Codex transcript.
+      if(b.replicasWorkspace&&r.type==='additional_tools')return;
       if(r.type==='message'&&['user','assistant'].includes(r.role)){
         kind='message';data=r;
         const meta=r.internal_chat_message_metadata_passthrough,kinds=meta?.content_item_kinds,items=meta?.content_item_metadata;
