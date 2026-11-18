@@ -47,6 +47,33 @@ normal authorization flow. Source packages contain an empty MCP configuration
 until bound; never add a second cloud MCP entry to a self-host installation.
 The shared skill must be included in the installed package.
 
+## Platform archives
+
+Local packages with a native runtime are distributed as complete platform ZIPs,
+not installed from a source-text file allowlist. `scripts/package-local.mjs`
+builds a dedicated executable from `local/runtime/` with Bun1.3.14. It does not
+import or dispatch any OpenCrawl CLI code. Runtime project configuration and
+preloads are disabled. The archive includes the complete modifiable application
+source and upstream runtime license notices.
+
+The platform receipt is `artifact.json`:
+
+```json
+{"schemaVersion":1,"harness":"claude-code","name":"opencrawl-local-claude-code",
+ "version":"0.1.0","platform":"darwin-arm64",
+ "filename":"opencrawl-local-claude-code-0.1.0-darwin-arm64.zip",
+ "sha256":"<archive SHA-256>","executable":"bin/opencrawl-hook",
+ "source":["runtime/main.mjs"]}
+```
+
+Windows uses platform `win32-x64` and `bin/opencrawl-hook.exe`. Its archive
+contains the native PowerShell hook commands; POSIX archives contain direct
+executable commands. Preserve executable mode when extracting POSIX ZIPs. Reject
+traversal, symlinks, duplicate paths, unlisted files and checksum mismatches.
+No archive contains a binding or credentials. Release manifests must pin the
+artifact URL/checksum and source commit; a moving branch or CI artifact is not a
+production release. Do not install a development package over working capture.
+
 ## Capability and verification
 
 `capabilities.json` describes implemented callbacks and capture coverage.

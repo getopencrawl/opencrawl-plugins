@@ -1,5 +1,5 @@
-import {readFileSync,openSync,closeSync,fstatSync,readSync,realpathSync,readdirSync,unlinkSync,existsSync,constants} from 'node:fs';
-import {join,resolve,relative,isAbsolute,sep} from 'node:path';
+import {readFileSync,openSync,closeSync,fstatSync,readSync,realpathSync,readdirSync,unlinkSync,existsSync,lstatSync,constants} from 'node:fs';
+import {join,resolve,relative,isAbsolute,sep,dirname} from 'node:path';
 import {hostname} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {hash,atomic,once,readJson,locked,recording,enrollment,nativeId,excluded} from './io.mjs';
@@ -11,7 +11,10 @@ function pathFor(b,c,event,{mustExist=true}={}){
   if(b.client!=='claude-code')throw Error('Harness collector is not implemented');
   if(!isAbsolute(c.roots?.[b.client]??'')||!isAbsolute(event.transcript_path??''))throw Error('Missing native transcript path');
   const base=mustExist?realpathSync(c.roots[b.client]):resolve(c.roots[b.client]),file=mustExist?realpathSync(event.transcript_path):resolve(event.transcript_path),parts=relative(base,file).split(sep);
-  if(parts.length!==3||parts[0]!=='projects'||parts[2]!==event.session_id+'.jsonl')throw Error('Transcript is outside the selected native session');
+  const allowed=event.parentSessionId
+    ? parts.length===5&&parts[0]==='projects'&&parts[2]===event.parentSessionId&&parts[3]==='subagents'&&parts[4]==='agent-'+event.agent_id+'.jsonl'&&event.session_id===event.parentSessionId+':'+event.agent_id
+    : parts.length===3&&parts[0]==='projects'&&parts[2]===event.session_id+'.jsonl';
+  if(!allowed)throw Error('Transcript is outside the selected native session');
   return file;
 }
 function sourceEvent(b,record,offset){
@@ -61,7 +64,7 @@ function finishMessage(b,event,id){
 function queue(b,event,events){
   if(!events.length)return;
   if(!recording(b,event))throw Error('Recording no longer selected');
-  const batch=redact({schemaVersion:1,owner:b.owner,installationId:b.installationId,host:hostname(),harness:b.client,origin:'cli',sessionId:event.session_id,cwd:event.cwd,captureMode:'live',events:events.map(wire),attachments:[]});
+  const batch=redact({schemaVersion:1,owner:b.owner,installationId:b.installationId,host:hostname(),harness:b.client,origin:event.parentSessionId?'subagent':'cli',...(event.parentSessionId?{parentSessionId:event.parentSessionId}:{}),sessionId:event.session_id,cwd:event.cwd,captureMode:'live',events:events.map(wire),attachments:[]});
   // Scope fields are not secret-shaped free text and must remain exact.
   batch.owner=b.owner;batch.installationId=b.installationId;batch.sessionId=event.session_id;batch.cwd=event.cwd;
   const bytes=JSON.stringify(batch);if(Buffer.byteLength(bytes)>16*1024*1024)throw Error('Capture batch exceeds limit');
@@ -69,6 +72,29 @@ function queue(b,event,events){
   return id;
 }
 export async function collect(b,event){
+  // Child agents do not emit MessageDisplay. Only the exact native parent's
+  // subtree (or the explicit matching SubagentStop path) can enroll a child.
+  const c=recording(b,event);if(!c)return {selected:false};
+  const parent=event.session_id;
+  const child=(id,file)=>({...event,session_id:parent+':'+id,parentSessionId:parent,agent_id:id,transcript_path:file});
+  if(event.hook_event_name==='SubagentStop'){
+    if(!nativeId(event.agent_id)||!isAbsolute(event.agent_transcript_path??''))throw Error('Missing native child transcript identity');
+    const parentFile=pathFor(b,c,event,{mustExist:false});
+    if(resolve(event.agent_transcript_path)!==join(dirname(parentFile),parent,'subagents','agent-'+event.agent_id+'.jsonl'))throw Error('Child transcript does not belong to the native parent');
+    return collectOne(b,child(event.agent_id,event.agent_transcript_path));
+  }
+  const result=await collectOne(b,event);
+  let parentFile;try{parentFile=pathFor(b,c,event);}catch(error){if(error.code!=='ENOENT')throw error;}
+  if(parentFile){
+    const directory=join(dirname(parentFile),parent,'subagents');
+    if(existsSync(directory)&&!lstatSync(directory).isSymbolicLink()){
+      const files=readdirSync(directory).filter(n=>n.startsWith('agent-')&&n.endsWith('.jsonl')&&nativeId(n.slice(6,-6))).slice(0,64);
+      for(const name of files)await collectOne(b,child(name.slice(6,-6),join(directory,name)));
+    }
+  }
+  return result;
+}
+async function collectOne(b,event){
   const c=recording(b,event);if(!c)return {selected:false};
   const messages=join(observations(b,event.session_id),'messages');
   if(existsSync(messages))for(const id of readdirSync(messages).filter(nativeId))finishMessage(b,event,id);
@@ -89,9 +115,9 @@ export async function collect(b,event){
         while(start<bytes.length){
           const end=bytes.indexOf(10,start);if(end<0)break;
           const line=bytes.subarray(start,end).toString('utf8'),record=JSON.parse(line);
-          if(record.sessionId&&record.sessionId!==event.session_id)throw Error('Transcript session mismatch');
+          if(record.sessionId&&record.sessionId!==(event.parentSessionId??event.session_id)||event.parentSessionId&&record.agentId&&record.agentId!==event.agent_id)throw Error('Transcript session mismatch');
           let parsed=sourceEvent(b,record,offset);
-          if(parsed?.kind==='message'){
+          if(parsed?.kind==='message'&&!event.parentSessionId){
             const content=parsed.data.content;
             // Visible assistant text comes from MessageDisplay, with a native
             // message identity and complete chunk sequence. Tool blocks still

@@ -168,3 +168,18 @@ test('context admission caps concurrent checks and never turns skipped replay in
   assert(!(await suggest(f.b,three)).output);assert(!(await suggest(f.b,three)).output);
   assert.equal(f.received.filter(r=>r.path==='/api/context/suggestions').length,0);
 });
+
+test('child assistant messages come from the exact parent subtree without MessageDisplay',async t=>{
+  const f=await fixture(t),{b,event}=f;
+  appendFileSync(event.transcript_path,'');
+  const childDirectory=join(event.transcript_path.slice(0,-6),'subagents');mkdirSync(childDirectory,{recursive:true});
+  const child=join(childDirectory,'agent-child1.jsonl');
+  const rows=['CHILD INTERMEDIATE','CHILD FINAL'].map((text,i)=>({type:'assistant',uuid:'child-message-'+i,sessionId:event.session_id,agentId:'child1',isSidechain:true,timestamp:new Date().toISOString(),message:{role:'assistant',content:[{type:'text',text}]}}));
+  appendFileSync(child,rows.map(r=>JSON.stringify(r)).join('\n')+'\n');
+  await collect(b,{...event,hook_event_name:'SubagentStop',agent_id:'child1',agent_transcript_path:child});
+  await collect(b,{...event,hook_event_name:'Stop'});
+  const batches=f.queued();assert.equal(batches.length,1);
+  assert.equal(batches[0].origin,'subagent');assert.equal(batches[0].parentSessionId,event.session_id);
+  assert.equal(batches[0].sessionId,event.session_id+':child1');assert.equal(batches[0].events.length,2);
+  await assert.rejects(collect(b,{...event,hook_event_name:'SubagentStop',agent_id:'child1',agent_transcript_path:child.replace('session-1','other-session')}),/native parent/);
+});

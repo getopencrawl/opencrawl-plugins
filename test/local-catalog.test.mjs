@@ -22,6 +22,6 @@ test('native installer catalog never represents a stub as capture-ready',()=>{
     }
     assert.deepEqual(json(`${item.path}/.mcp.json`),{mcpServers:{}});
     assert.equal(readFileSync(resolve(root,item.path,'LICENSE'),'utf8'),readFileSync(resolve(root,'LICENSE'),'utf8'));
-    assert.equal(readFileSync(resolve(root,item.path,'skills/opencrawl/SKILL.md'),'utf8'),readFileSync(resolve(root,'opencrawl/skills/opencrawl/SKILL.md'),'utf8'));
+    assert.equal(readFileSync(resolve(root,item.path,'skills/opencrawl/SKILL.md'),'utf8'),readFileSync(resolve(root,caps.status==='stub'?'opencrawl/skills/opencrawl/SKILL.md':'local/SKILL.md'),'utf8'));
   }
 });

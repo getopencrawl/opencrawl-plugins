@@ -21,6 +21,9 @@
     "Stop": [{"hooks": [
       {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action capture", "timeout": 15}
     ]}],
+    "SubagentStop": [{"hooks": [
+      {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action capture", "timeout": 30, "async": true}
+    ]}],
     "StopFailure": [{"hooks": [
       {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CLAUDE_PLUGIN_ROOT}\" --action capture", "timeout": 15}
     ]}],
