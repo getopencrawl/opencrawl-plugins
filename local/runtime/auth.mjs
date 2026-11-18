@@ -50,7 +50,7 @@ export function replicasCredentials(mint=mintWorkspaceToken){
 const workspaceToken=replicasCredentials();
 export async function token(b,{rejected,refresh=false}={}){
   enrollment(b);
-  if(b.authMode==='replicas-workspace')return workspaceToken(b,rejected);
+  if(b.replicasWorkspace)return workspaceToken(b,rejected);
   const usable=s=>s.expiresAt>Date.now()+30000&&s.accessToken!==rejected;
   let s=saved(b);if(usable(s))return s.accessToken;
   if(!refresh)throw Error('Sign-in needs attention');
@@ -71,13 +71,13 @@ export async function token(b,{rejected,refresh=false}={}){
 export async function request(b,path,{method='GET',body,refresh=false,timeout=6000,identity=false,guard=()=>{}}={}){
   if(!path.startsWith('/api/'))throw Error('Invalid API path');
   enrollment(b);let credential=await token(b,{refresh});
-  const check=()=>{enrollment(b);guard();if(!b.authMode&&saved(b).accessToken!==credential)throw Error('Configured credential changed');};
+  const check=()=>{enrollment(b);guard();if(!b.replicasWorkspace&&saved(b).accessToken!==credential)throw Error('Configured credential changed');};
   const send=(url,options={})=>{check();return fetch(b.api+url,{redirect:'error',signal:AbortSignal.timeout(timeout),...options,headers:{authorization:'Bearer '+credential,...options.headers}});};
   for(let attempt=0;attempt<2;attempt++){
     // Authorize the exact credential used for content egress. A refresh or
     // concurrent sign-in must never redirect old content to a different owner.
     let response;
-    if(b.authMode!=='replicas-workspace'||path!=='/api/sessions/batches'){
+    if(!b.replicasWorkspace||path!=='/api/sessions/batches'){
       response=await send('/api/sessions/identity');
       if(response.status===401&&refresh&&attempt===0){await response.body?.cancel();credential=await token(b,{rejected:credential,refresh:true});continue;}
       const identification=await json(response);owner(b,identification.data);check();

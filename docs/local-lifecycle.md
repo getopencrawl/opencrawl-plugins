@@ -45,8 +45,8 @@ Cursor converts native content in the standalone hook in both modes and hands
 its immutable queue to the worker for durable upload. It does not enroll Cursor
 child transcripts into the older worker's independent transcript reader.
 
-For direct capture in a Replicas workspace, the installer can set
-`authMode` to `replicas-workspace` in the private binding. At enrollment, get
+In Replicas, the server-issued workspace owner selects workspace authentication
+for both Claude Code and Codex. No extra binding setting is needed. At enrollment, get
 a token from `/usr/local/bin/replicas identity token --audience <api-origin>`
 and use the tenant and workload user returned by that origin's
 `/api/sessions/identity` for both the binding and capture configuration.

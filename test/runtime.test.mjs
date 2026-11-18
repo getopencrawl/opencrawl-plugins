@@ -240,12 +240,12 @@ test('idle workload capture performs no authentication or network request',async
   const f=await fixture(t);
   const workloadOwner={...f.b.owner,userId:'workload_replicas_'+'1'.repeat(64)};
   const local=JSON.parse(readFileSync(join(f.root,'.opencrawl-binding.json')));
-  atomic(join(f.root,'.opencrawl-binding.json'),{...local,owner:workloadOwner,authMode:'replicas-workspace'});
+  atomic(join(f.root,'.opencrawl-binding.json'),{...local,owner:workloadOwner});
   atomic(join(f.b.capture,'config.json'),{...f.config,owner:workloadOwner});
   const workload=binding(f.root);
   assert.notEqual(workload.key,f.b.key);
   assert.equal(await flush(workload),0);
   assert.equal(f.received.length,0);
-  atomic(join(f.root,'.opencrawl-binding.json'),{...local,authMode:'replicas-workspace'});
-  assert.throws(()=>binding(f.root),/Invalid workload/);
+  assert.equal(workload.replicasWorkspace,true);
+  assert.equal(f.b.replicasWorkspace,false);
 });
