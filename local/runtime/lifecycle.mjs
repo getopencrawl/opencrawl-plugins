@@ -62,7 +62,7 @@ export async function suggest(b,event){
       if(Buffer.byteLength(text)>16000)throw Error('Context response exceeds output limit');
       return {output:{hookSpecificOutput:{hookEventName:'UserPromptSubmit',additionalContext:text}},handoff:()=>report('handoff',{...(checkId?{checkId}:{}),results:results.length})};
     },500);
-  }catch{report('dropped',{reason:'unavailable'});}
+  }catch(error){report('dropped',{reason:'unavailable'});result={diagnostic:{name:error.name,code:error.code??null}};}
   return {...result,flush:async()=>{
     if(!existsSync(outbox)||!settings(b))return;
     const files=readdirSync(outbox).filter(n=>/^[a-f0-9-]+\.json$/.test(n));

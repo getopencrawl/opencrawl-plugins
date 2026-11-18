@@ -117,7 +117,7 @@ test('context is opt-in and a duplicate prompt cannot start another billable che
   const f=await fixture(t),event={...f.event,hook_event_name:'UserPromptSubmit',prompt_id:'prompt-1',prompt:'A question'};
   assert.equal(await suggest(f.b,event),undefined);assert.equal(f.received.length,0);
   atomic(join(f.b.profile,'context-checks',hash(f.b.api)+'.json'),{...f.config,revision:'revision-1'});
-  const first=await suggest(f.b,event);assert(first.output);first.handoff();await first.flush();
+  const first=await suggest(f.b,event);assert(first.output,JSON.stringify(first.diagnostic));first.handoff();await first.flush();
   const second=await suggest(f.b,event);assert(!second.output);
   assert.equal(f.received.filter(x=>x.path==='/api/context/suggestions').length,1);
 });

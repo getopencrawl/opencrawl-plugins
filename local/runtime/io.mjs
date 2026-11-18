@@ -21,14 +21,14 @@ export function readJson(file,max=1024*1024,{missing=false,privateFile=false}={}
 }
 export function atomic(file,value){
   mkdirSync(dirname(file),{recursive:true,mode:0o700});
-  const tmp=file+'.'+randomUUID()+'.tmp',fd=openSync(tmp,'wx',0o600);
+  const tmp=join(dirname(file),'.tmp-'+randomUUID()),fd=openSync(tmp,'wx',0o600);
   try{writeFileSync(fd,typeof value==='string'?value:JSON.stringify(value)+'\n');fsyncSync(fd);}finally{closeSync(fd);}
   try{renameSync(tmp,file);if(process.platform!=='win32'){const dir=openSync(dirname(file),'r');try{fsyncSync(dir);}finally{closeSync(dir);}}}finally{try{unlinkSync(tmp);}catch{}}
 }
 /** Publish an immutable receipt once. Readers never observe a partial write. */
 export function once(file,value){
   mkdirSync(dirname(file),{recursive:true,mode:0o700});
-  const tmp=file+'.'+randomUUID()+'.tmp',fd=openSync(tmp,'wx',0o600);
+  const tmp=join(dirname(file),'.tmp-'+randomUUID()),fd=openSync(tmp,'wx',0o600);
   try{writeFileSync(fd,JSON.stringify(value)+'\n');fsyncSync(fd);}finally{closeSync(fd);}
   try{linkSync(tmp,file);}
   catch(error){if(error.code!=='EEXIST')throw error;}
@@ -78,7 +78,7 @@ export async function locked(file,operation,timeout=5000){
     // Older CLI versions additionally use this PID marker. Never displace a
     // live owner. Current CLI versions hold the same SQLite transaction.
     for(;;){
-      const tmp=file+'.'+randomUUID()+'.pid';
+      const tmp=join(dirname(file),'.pid-'+randomUUID());
       try{
         writeFileSync(tmp,String(process.pid),{flag:'wx',mode:0o600});linkSync(tmp,file);published=lstatSync(file,{bigint:true});break;
       }catch(error){
