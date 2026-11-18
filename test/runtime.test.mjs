@@ -9,7 +9,7 @@ import {observe,collect,flush,handoff} from '../local/runtime/capture.mjs';
 import {request} from '../local/runtime/auth.mjs';
 import {search,suggest,notePrompt} from '../local/runtime/lifecycle.mjs';
 
-export async function fixture(t){
+export async function fixture(t,harness='claude-code'){
   const root=mkdtempSync(join(tmpdir(),'opencrawl-hooks-test-'));
   t.after(()=>rmSync(root,{recursive:true,force:true}));
   const received=[],owner={tenantId:'tenant-test',userId:'user-test'};
@@ -33,14 +33,16 @@ export async function fixture(t){
   t.after(()=>new Promise(resolve=>server.close(resolve)));
   const api='http://127.0.0.1:'+server.address().port;
   const profile=join(root,'profile'),native=join(root,'native'),session='session-1';
-  const value={schemaVersion:1,client:'claude-code',api,configHome:profile,installationId:'installation-test',owner,captureMode:'hook'};
+  const value={schemaVersion:1,client:harness,api,configHome:profile,installationId:'installation-test',owner,captureMode:'hook'};
   atomic(join(root,'.opencrawl-binding.json'),value);
   atomic(join(root,'.claude-plugin','plugin.json'),{name:'opencrawl-local-claude-code'});
+  atomic(join(root,'.codex-plugin','plugin.json'),{name:'opencrawl-local-codex'});
   atomic(join(root,'.mcp.json'),{mcpServers:{opencrawl:{type:'http',url:api+'/mcp'}}});
-  const b=binding(root),config={schemaVersion:1,api,installationId:value.installationId,owner,installedAt:new Date(Date.now()-60000).toISOString(),harnesses:['claude-code'],roots:{'claude-code':native}};
+  const b=binding(root),config={schemaVersion:1,api,installationId:value.installationId,owner,installedAt:new Date(Date.now()-60000).toISOString(),harnesses:[harness],roots:{[harness]:native}};
   atomic(join(b.capture,'config.json'),config);
   atomic(join(b.profile,hash(api)+'.json'),{accessToken:'fixture-credential',expiresAt:Date.now()+3600000});
-  const path=join(native,'projects','project',session+'.jsonl');
+  const path=harness==='codex'?join(native,'sessions','2026','11','17','rollout-2026-11-17T00-00-00-'+session+'.jsonl'):join(native,'projects','project',session+'.jsonl');
+  if(harness==='codex')mkdirSync(join(native,'sessions','2026','11','17'),{recursive:true});
   mkdirSync(join(native,'projects','project'),{recursive:true});
   const event={session_id:session,cwd:root,transcript_path:path};
   const queued=()=>readdirSync(join(b.capture,'queue')).filter(x=>x.endsWith('.json')).map(x=>JSON.parse(readFileSync(join(b.capture,'queue',x))));

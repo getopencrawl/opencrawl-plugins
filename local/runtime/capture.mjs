@@ -1,5 +1,5 @@
 import {readFileSync,openSync,closeSync,fstatSync,readSync,realpathSync,readdirSync,unlinkSync,existsSync,lstatSync,constants} from 'node:fs';
-import {join,resolve,relative,isAbsolute,sep,dirname} from 'node:path';
+import {join,resolve,relative,isAbsolute,sep,dirname,toNamespacedPath} from 'node:path';
 import {hostname} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {hash,atomic,once,readJson,locked,recording,enrollment,nativeId,excluded} from './io.mjs';
@@ -8,9 +8,14 @@ import {redact} from './redact.mjs';
 const canonical=v=>v===null||typeof v!=='object'?JSON.stringify(v):Array.isArray(v)?'['+v.map(canonical).join(',')+']':'{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canonical(v[k])).join(',')+'}';
 export function wire(event){const e=JSON.parse(JSON.stringify(redact(event)));return {...e,id:'wire1:'+hash('opencrawl-wire-event-v1\n'+canonical(e))};}
 function pathFor(b,c,event,{mustExist=true}={}){
-  if(b.client!=='claude-code')throw Error('Harness collector is not implemented');
   if(!isAbsolute(c.roots?.[b.client]??'')||!isAbsolute(event.transcript_path??''))throw Error('Missing native transcript path');
   const base=mustExist?realpathSync(c.roots[b.client]):resolve(c.roots[b.client]),file=mustExist?realpathSync(event.transcript_path):resolve(event.transcript_path),parts=relative(base,file).split(sep);
+  if(b.client==='codex'){
+    const name=parts.at(-1),location=parts.length===5&&parts[0]==='sessions'&&/^\d{4}$/.test(parts[1])&&/^\d{2}$/.test(parts[2])&&/^\d{2}$/.test(parts[3])||parts.length===2&&parts[0]==='archived_sessions';
+    if(!location||!name.startsWith('rollout-')||!name.endsWith('-'+event.session_id+'.jsonl'))throw Error('Transcript is outside the selected native session');
+    return file;
+  }
+  if(b.client!=='claude-code')throw Error('Harness collector is not implemented');
   const allowed=event.parentSessionId
     ? parts.length===5&&parts[0]==='projects'&&parts[2]===event.parentSessionId&&parts[3]==='subagents'&&parts[4]==='agent-'+event.agent_id+'.jsonl'&&event.session_id===event.parentSessionId+':'+event.agent_id
     : parts.length===3&&parts[0]==='projects'&&parts[2]===event.session_id+'.jsonl';
@@ -19,6 +24,24 @@ function pathFor(b,c,event,{mustExist=true}={}){
 }
 function sourceEvent(b,record,offset){
   let kind,data;
+  if(b.client==='codex'){
+    const r=record.payload;
+    if(record.type==='response_item'&&r){
+      if(r.type==='message'&&['user','assistant'].includes(r.role)){
+        kind='message';data=r;
+        const meta=r.internal_chat_message_metadata_passthrough,kinds=meta?.content_item_kinds,items=meta?.content_item_metadata;
+        if(r.role==='user'&&Array.isArray(r.content)&&Array.isArray(kinds)&&Array.isArray(items)&&kinds.length===r.content.length&&items.length===r.content.length){
+          // Filter only native provenance, never text that resembles setup.
+          const keep=r.content.map((_,i)=>i).filter(i=>!(kinds[i]==='agents_md.instructions'&&items[i]?.provenance?.type==='agents_md')&&!(kinds[i]==='environments.environment_context'&&items[i]?.provenance?.type==='harness'));
+          if(!keep.length)return;
+          data={...r,content:keep.map(i=>r.content[i]),internal_chat_message_metadata_passthrough:{...meta,content_item_kinds:keep.map(i=>kinds[i]),content_item_metadata:keep.map(i=>items[i])}};
+        }
+      }else if(/call|tool/.test(r.type??'')){kind=/output|result/.test(r.type)?'tool_result':'tool_call';data=r;}
+    }else if(record.type==='event_msg'&&r?.type==='item_completed'&&r.item?.type==='McpToolCall'){kind='mcp_tool_call_end';data=r;}
+    else if(record.type==='event_msg'&&['exec_command_end','mcp_tool_call_end'].includes(r?.type)){kind=r.type;data=r;}
+    if(!kind)return;
+    return {id:hash(b.client+':'+offset+':'+JSON.stringify(record)),kind,sequence:offset,timestamp:record.timestamp??null,nativeId:r.id??null,parentId:null,turnId:r.turn_id??r.internal_chat_message_metadata_passthrough?.turn_id??null,agentId:null,data};
+  }
   if(['user','assistant'].includes(record.type)&&record.isMeta!==true){kind=record.type==='user'&&record.origin?.kind==='task-notification'?'automation_message':'message';data=record.message;}
   else if(record.type==='attachment'&&record.attachment?.type==='queued_command'&&record.attachment.commandMode==='prompt'){kind='message';data={role:'user',content:record.attachment.prompt};}
   else if(['custom-title','ai-title'].includes(record.type)){kind='session_title';data={title:record.customTitle??record.aiTitle,titleType:record.type==='custom-title'?'custom':'auto'};}
@@ -29,6 +52,7 @@ const observations=(b,session)=>join(b.profile,'plugin-state',b.key,'observed',h
 /** Fast local receipt: no authentication, network, transcript reads or CLI. */
 export async function observe(b,event){
   const c=recording(b,event);if(b.captureMode!=='hook'||!c)return;
+  if(b.client==='codex')return; // The native transcript supplies stable message IDs.
   pathFor(b,c,event,{mustExist:false});
   const dir=observations(b,event.session_id);
   if(event.hook_event_name==='UserPromptSubmit'){
@@ -79,6 +103,7 @@ function queue(b,event,events){
   return id;
 }
 export async function collect(b,event){
+  if(b.client==='codex')return collectCodex(b,event);
   // Child agents do not emit MessageDisplay. Only the exact native parent's
   // subtree (or the explicit matching SubagentStop path) can enroll a child.
   const c=recording(b,event);if(!c)return {selected:false};
@@ -101,6 +126,46 @@ export async function collect(b,event){
   }
   return result;
 }
+async function codexEvent(b,event){
+  const c=recording(b,event);if(!c)return;
+  let value={...event};
+  if(event.agent_id){
+    if(!nativeId(event.agent_id))throw Error('Invalid child session identity');
+    value={...event,parentSessionId:event.session_id,session_id:event.agent_id,transcript_path:event.agent_transcript_path??event.transcript_path};
+  }
+  if(!value.transcript_path){
+    // Resolve only the announced ID through the native primary-key index.
+    // Never enumerate native conversations or infer a fallback account/root.
+    const root=c.roots?.codex;if(!isAbsolute(root??''))throw Error('Missing Codex root');
+    const name=readdirSync(root).filter(n=>/^state_\d+\.sqlite$/.test(n)).sort((a,b)=>Number(b.match(/\d+/)[0])-Number(a.match(/\d+/)[0]))[0];
+    if(!name)throw Error('Native session index is unavailable');
+    const file=join(root,name);if(lstatSync(file).isSymbolicLink())throw Error('Invalid native session index');
+    const db=process.versions.bun?new (await import('bun:sqlite')).Database(toNamespacedPath(file),{readonly:true}):new (await import('node:sqlite')).DatabaseSync(toNamespacedPath(file),{readOnly:true});
+    try{
+      const sql='SELECT rollout_path FROM threads WHERE id = ?';
+      const row=process.versions.bun?db.query(sql).get(value.session_id):db.prepare(sql).get(value.session_id);
+      if(typeof row?.rollout_path!=='string')throw Error('Native session not found');
+      value.transcript_path=row.rollout_path;
+    }finally{db.close();}
+  }
+  pathFor(b,c,value,{mustExist:false});return value;
+}
+async function collectCodex(b,event){
+  const native=await codexEvent(b,event);if(!native)return {selected:false};
+  const result=await collectOne(b,native);
+  if(native.parentSessionId){
+    atomic(join(b.profile,'plugin-state',b.key,'children',hash(native.parentSessionId),native.session_id+'.json'),native);
+  }else{
+    // Retry only children previously announced by this parent's native hooks.
+    const dir=join(b.profile,'plugin-state',b.key,'children',hash(native.session_id));
+    if(existsSync(dir))for(const name of readdirSync(dir).filter(n=>n.endsWith('.json')&&nativeId(n.slice(0,-5))).slice(0,64)){
+      const child=readJson(join(dir,name),16384);
+      if(child.parentSessionId!==native.session_id||child.session_id!==name.slice(0,-5))throw Error('Child session receipt mismatch');
+      await collectOne(b,child);
+    }
+  }
+  return result;
+}
 async function collectOne(b,event){
   const c=recording(b,event);if(!c)return {selected:false};
   const users=join(observations(b,event.session_id),'users');
@@ -118,6 +183,13 @@ async function collectOne(b,event){
       try{
         const stat=fstatSync(fd),identity=String(stat.dev)+':'+String(stat.ino);
         if(!stat.isFile()||stat.size<offset||state.fileIdentity&&state.fileIdentity!==identity)throw Error('Native transcript replaced; checkpoint retained');
+        if(b.client==='codex'){
+          const header=Buffer.alloc(Math.min(stat.size,1024*1024));readSync(fd,header,0,header.length,0);
+          const end=header.indexOf(10);if(end<0)throw Error('Native session header is incomplete');
+          const record=JSON.parse(header.subarray(0,end).toString('utf8'));
+          if(record.type!=='session_meta'||record.payload?.id!==event.session_id)throw Error('Transcript session mismatch');
+          if(event.parentSessionId&&record.payload.source?.subagent?.thread_spawn?.parent_thread_id!==event.parentSessionId)throw Error('Child transcript parent mismatch');
+        }
         state.fileIdentity=identity;
         const deadline=Date.now()+3000;
         while(offset<stat.size&&Date.now()<deadline){
@@ -128,7 +200,7 @@ async function collectOne(b,event){
           const line=bytes.subarray(start,end).toString('utf8'),record=JSON.parse(line);
           if(record.sessionId&&record.sessionId!==(event.parentSessionId??event.session_id)||event.parentSessionId&&record.agentId&&record.agentId!==event.agent_id)throw Error('Transcript session mismatch');
           let parsed=sourceEvent(b,record,offset);
-          if(parsed?.kind==='message'&&!event.parentSessionId){
+          if(b.client==='claude-code'&&parsed?.kind==='message'&&!event.parentSessionId){
             const content=parsed.data.content;
             // Visible assistant text comes from MessageDisplay, with a native
             // message identity and complete chunk sequence. Tool blocks still
@@ -168,6 +240,10 @@ export function handoff(b,event){
   atomic(join(b.capture,'daemon','inbox',sequence+'-'+id+'.json'),{kind:'capture',id,at,api:b.api,installationId:b.installationId,owner:b.owner,pid:process.ppid,record:{id,at:new Date(at).toISOString(),sequence,harness:b.client,event:payload}});
   return {selected:true,handoff:true};
 }
+export async function handoffCodex(b,event){
+  const native=await codexEvent(b,event);if(!native)return {selected:false};
+  return handoff(b,native);
+}
 export async function flush(b){
   return locked(join(b.profile,hash('capture:flush')+'.json.lock'),async()=>{
     await request(b,'/api/sessions/identity',{identity:true,refresh:true});
@@ -176,11 +252,11 @@ export async function flush(b){
     for(const name of readdirSync(directory).filter(n=>/^[a-f0-9]{64}\.json$/.test(n)).slice(0,64)){
       const c=enrollment(b);if(c.disabled||!c.harnesses?.includes(b.client))break;
       const file=join(directory,name),batch=readJson(file,16*1024*1024);
-      if(batch.harness!==b.client||batch.installationId!==b.installationId||batch.owner?.tenantId!==b.owner.tenantId||batch.owner?.userId!==b.owner.userId||excluded(c,batch.sessionId,batch.cwd))continue;
+      if(batch.harness!==b.client||batch.installationId!==b.installationId||batch.owner?.tenantId!==b.owner.tenantId||batch.owner?.userId!==b.owner.userId||excluded(c,batch.sessionId,batch.cwd)||batch.parentSessionId&&excluded(c,batch.parentSessionId,batch.cwd))continue;
       if(batch.attachments?.some(a=>a.status==='captured'))continue;
       // Only immutable, already-redacted batches are eligible for direct send.
       const bytes=JSON.stringify(batch);if(hash(bytes)+'.json'!==name||JSON.stringify(redact(batch.events))!==JSON.stringify(batch.events))throw Error('Queue integrity check failed');
-      const guard=()=>{const now=enrollment(b);if(now.disabled||!now.harnesses?.includes(b.client)||excluded(now,batch.sessionId,batch.cwd))throw Error('Recording selection changed');};
+      const guard=()=>{const now=enrollment(b);if(now.disabled||!now.harnesses?.includes(b.client)||excluded(now,batch.sessionId,batch.cwd)||batch.parentSessionId&&excluded(now,batch.parentSessionId,batch.cwd))throw Error('Recording selection changed');};
       const receipt=await request(b,'/api/sessions/batches',{method:'POST',body:bytes,timeout:8000,refresh:true,guard});
       if(receipt.stored!==true||receipt.batchId!==hash(bytes))throw Error('Invalid capture receipt');
       const savedReceipt={at:new Date().toISOString(),...receipt,harness:b.client,installationId:b.installationId,sessionId:batch.sessionId};

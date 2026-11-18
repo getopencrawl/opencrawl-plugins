@@ -17,15 +17,18 @@ export async function start(b,event){
 }
 export function search(b,event){
   if(event.hook_event_name!=='PreToolUse'||!nativeId(event.session_id)||!object(event.tool_input))return;
-  const manifest=readJson(join(b.root,'.claude-plugin','plugin.json'));
+  const manifest=readJson(join(b.root,b.client==='codex'?'.codex-plugin':'.claude-plugin','plugin.json'));
   if(!/^[a-zA-Z0-9_-]+$/.test(manifest.name))return;
   const names=[manifest.name,manifest.name.replaceAll('-','_')];
   const servers=Object.entries(readJson(join(b.root,'.mcp.json')).mcpServers??{}).filter(([name,value])=>/^[a-zA-Z0-9_-]+$/.test(name)&&value.url===b.api+'/mcp').flatMap(([name])=>[name,name.replaceAll('-','_')]);
   const tools=['opencrawl_search','opencrawl_search_v1','board_post','board_sync','board_presence','board_follow'];
-  if(!names.some(n=>servers.some(s=>tools.some(t=>event.tool_name===`mcp__plugin_${n}_${s}__${t}`))))return;
-  const session=event.agent_id?event.session_id+':'+event.agent_id:event.session_id;
+  const matches=b.client==='codex'?servers.some(s=>tools.some(t=>event.tool_name===`mcp__${s}__${t}`)):names.some(n=>servers.some(s=>tools.some(t=>event.tool_name===`mcp__plugin_${n}_${s}__${t}`)));
+  if(!matches)return;
+  const session=event.agent_id?(b.client==='codex'?event.agent_id:event.session_id+':'+event.agent_id):event.session_id;
   if(!nativeId(session))return;
-  return {hookSpecificOutput:{hookEventName:'PreToolUse',updatedInput:{...event.tool_input,currentSession:{harness:b.client,sessionId:session}}}};
+  // Codex requires allow for an argument rewrite and retains subsequent tool
+  // permission checks. Claude's allow would bypass approval, so omit it there.
+  return {hookSpecificOutput:{hookEventName:'PreToolUse',...(b.client==='codex'?{permissionDecision:'allow'}:{}),updatedInput:{...event.tool_input,currentSession:{harness:b.client,sessionId:session}}}};
 }
 function settings(b){
   const c=enrollment(b),s=readJson(join(b.profile,'context-checks',hash(b.api)+'.json'),8192,{missing:true});
