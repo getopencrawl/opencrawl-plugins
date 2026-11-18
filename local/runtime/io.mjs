@@ -1,6 +1,6 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {mkdirSync,openSync,closeSync,writeFileSync,fsyncSync,renameSync,unlinkSync,lstatSync,readFileSync,chmodSync,linkSync,realpathSync,fstatSync,constants} from 'node:fs';
-import {dirname,join,isAbsolute,resolve,relative,sep} from 'node:path';
+import {dirname,join,isAbsolute,resolve,relative,sep,toNamespacedPath} from 'node:path';
 export const hash=value=>createHash('sha256').update(value).digest('hex');
 export const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 export const nativeId=value=>typeof value==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,199}$/.test(value);
@@ -70,7 +70,11 @@ export async function locked(file,operation,timeout=5000){
   // or unlink a lock database: a crashed process releases its transaction.
   mkdirSync(dirname(file),{recursive:true,mode:0o700});
   closeSync(openSync(file+'.sqlite','a',0o600));chmodSync(file+'.sqlite',0o600);
-  const db=process.versions.bun?new (await import('bun:sqlite')).Database(file+'.sqlite'):new (await import('node:sqlite')).DatabaseSync(file+'.sqlite');
+  // SQLite's Windows VFS also opens a journal beside this file. Pass the
+  // extended path explicitly so a normal profile plus hashed state names does
+  // not hit MAX_PATH when the journal suffix is appended.
+  const database=toNamespacedPath(resolve(file+'.sqlite'));
+  const db=process.versions.bun?new (await import('bun:sqlite')).Database(database):new (await import('node:sqlite')).DatabaseSync(database);
   db.exec('PRAGMA busy_timeout=0');let acquired=false,published;
   const deadline=Date.now()+timeout;
   try{
