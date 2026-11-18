@@ -31,6 +31,7 @@ export async function fixture(t,harness='claude-code'){
   const value={schemaVersion:1,client:harness,api,configHome:profile,installationId:'installation-test',owner,captureMode:'hook'};
   atomic(join(root,'.opencrawl-binding.json'),value);
   atomic(join(root,'.claude-plugin','plugin.json'),{name:'opencrawl-local-claude-code'});
+  atomic(join(root,'.cursor-plugin','plugin.json'),{name:'opencrawl-local-cursor'});
   atomic(join(root,'.codex-plugin','plugin.json'),{name:'opencrawl-local-codex'});
   atomic(join(root,'.antigravity-plugin','plugin.json'),{name:'opencrawl-local-antigravity'});
   atomic(join(root,'.mcp.json'),{mcpServers:{opencrawl:{type:'http',url:api+'/mcp'}}});
@@ -38,7 +39,8 @@ export async function fixture(t,harness='claude-code'){
   const b=binding(root),config={schemaVersion:1,api,installationId:value.installationId,owner,installedAt:new Date(Date.now()-60000).toISOString(),harnesses:[harness],roots:{[harness]:native}};
   atomic(join(b.capture,'config.json'),config);
   atomic(join(b.profile,hash(api)+'.json'),{accessToken:'fixture-credential',expiresAt:Date.now()+3600000});
-  const path=harness==='antigravity'?join(native,'antigravity-cli','brain',session,'.system_generated','logs','transcript_full.jsonl'):harness==='codex'?join(native,'sessions','2026','11','17','rollout-2026-11-17T00-00-00-'+session+'.jsonl'):join(native,'projects','project',session+'.jsonl');
+  const path=harness==='cursor'?join(native,'projects','project','agent-transcripts',session,session+'.jsonl'):harness==='antigravity'?join(native,'antigravity-cli','brain',session,'.system_generated','logs','transcript_full.jsonl'):harness==='codex'?join(native,'sessions','2026','11','17','rollout-2026-11-17T00-00-00-'+session+'.jsonl'):join(native,'projects','project',session+'.jsonl');
+  if(harness==='cursor')mkdirSync(join(native,'projects','project','agent-transcripts',session),{recursive:true});
   if(harness==='antigravity')mkdirSync(join(native,'antigravity-cli','brain',session,'.system_generated','logs'),{recursive:true});
   if(harness==='codex')mkdirSync(join(native,'sessions','2026','11','17'),{recursive:true});
   mkdirSync(join(native,'projects','project'),{recursive:true});

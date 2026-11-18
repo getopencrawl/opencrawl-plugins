@@ -9,7 +9,7 @@ import {archive} from './package.mts';
 
 const root=resolve(import.meta.dirname,'..');
 const harness=process.argv[2]??'claude-code';
-assert(['claude-code','codex','antigravity'].includes(harness),'Unsupported local package');
+assert(['claude-code','codex','cursor','antigravity'].includes(harness),'Unsupported local package');
 const platform=process.platform+'-'+process.arch;
 const targets={'darwin-arm64':'bun-darwin-arm64','darwin-x64':'bun-darwin-x64','linux-arm64':'bun-linux-arm64','linux-x64':'bun-linux-x64-baseline','win32-x64':'bun-windows-x64-baseline'};
 assert(targets[platform],'Unsupported runtime platform');
@@ -37,16 +37,17 @@ try{
   execFileSync(bun,arguments_,{stdio:'inherit'});
 }finally{rmSync(runtimeZip,{force:true});rmSync(runtimeDir,{recursive:true,force:true});}
 const source=['auth.mjs','capture.mjs','io.mjs','lifecycle.mjs','main.mjs','redact.mjs','THIRD_PARTY_NOTICES.txt'];
-const manifestPath=(harness==='antigravity'?'.antigravity-plugin':harness==='codex'?'.codex-plugin':'.claude-plugin')+'/plugin.json';
+const manifestPath=(harness==='cursor'?'.cursor-plugin':harness==='antigravity'?'.antigravity-plugin':harness==='codex'?'.codex-plugin':'.claude-plugin')+'/plugin.json';
 const base=[manifestPath,'.mcp.json','mcp.json',...(harness==='antigravity'?['mcp_config.json']:[]),'LICENSE','README.md','capabilities.json','skills/opencrawl/SKILL.md'];
 const directory=join(root,'local',harness);
 const manifest=JSON.parse(readFileSync(join(directory,manifestPath)));
 const hooksPath=harness==='antigravity'?'hooks.json':'hooks/hooks.json';
 const hooks=JSON.parse(readFileSync(join(directory,hooksPath)));
-const handlers=harness==='antigravity'?Object.values(hooks).flatMap(group=>Object.values(group).flatMap(list=>Array.isArray(list)?list.flatMap(item=>item.hooks??[item]):[])):Object.values(hooks.hooks).flatMap(groups=>groups.flatMap(group=>group.hooks));
+const handlers=harness==='antigravity'?Object.values(hooks).flatMap(group=>Object.values(group).flatMap(list=>Array.isArray(list)?list.flatMap(item=>item.hooks??[item]):[])):Object.values(hooks.hooks).flatMap(groups=>groups.flatMap(group=>group.hooks??[group]));
 if(process.platform==='win32')for(const hook of handlers){
   const action=hook.command.match(/--action ([a-z]+)$/)[1];
   if(harness==='antigravity'){hook.command='".\\bin\\opencrawl-hook.exe" --root "." --action '+action;continue;}
+  if(harness==='cursor'){hook.command='& "$env:CURSOR_PLUGIN_ROOT\\bin\\opencrawl-hook.exe" --root "$env:CURSOR_PLUGIN_ROOT" --action '+action;continue;}
   const variable=harness==='codex'?'PLUGIN_ROOT':'CLAUDE_PLUGIN_ROOT';
   hook.command='& "$env:'+variable+'\\bin\\opencrawl-hook.exe" --root "$env:'+variable+'" --action '+action;
   hook.shell='powershell';

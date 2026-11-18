@@ -18,7 +18,7 @@ export async function start(b,event){
 }
 export function search(b,event){
   if(event.hook_event_name!=='PreToolUse'||!nativeId(event.session_id)||!object(event.tool_input))return;
-  const manifest=readJson(join(b.root,b.client==='antigravity'?'.antigravity-plugin':b.client==='codex'?'.codex-plugin':'.claude-plugin','plugin.json'));
+  const manifest=readJson(join(b.root,b.client==='cursor'?'.cursor-plugin':b.client==='antigravity'?'.antigravity-plugin':b.client==='codex'?'.codex-plugin':'.claude-plugin','plugin.json'));
   if(!/^[a-zA-Z0-9_-]+$/.test(manifest.name))return;
   const names=[manifest.name,manifest.name.replaceAll('-','_')];
   const servers=Object.entries(readJson(join(b.root,b.client==='antigravity'?'mcp_config.json':'.mcp.json')).mcpServers??{}).filter(([name,value])=>/^[a-zA-Z0-9_-]+$/.test(name)&&value.url===b.api+'/mcp').flatMap(([name])=>[name,name.replaceAll('-','_')]);
@@ -28,7 +28,9 @@ export function search(b,event){
     if(!names.some(n=>servers.some(s=>input.ServerName===n+'_'+s))||!tools.includes(input.ToolName)||!object(input.Arguments))return;
     event={...event,tool_name:'mcp_'+input.ServerName+'_'+input.ToolName,tool_input:input.Arguments};
   }
-  const matches=b.client==='antigravity'?names.some(n=>servers.some(s=>tools.some(t=>event.tool_name===`mcp_${n}_${s}_${t}`))):b.client==='codex'?servers.some(s=>tools.some(t=>event.tool_name===`mcp__${s}__${t}`)):names.some(n=>servers.some(s=>tools.some(t=>event.tool_name===`mcp__plugin_${n}_${s}__${t}`)));
+  // Cursor's generic preToolUse omits server identity. Limit this guard to the
+  // two product-specific search aliases; never intercept generic board names.
+  const matches=b.client==='cursor'?servers.length>0&&['MCP:opencrawl_search','MCP:opencrawl_search_v1'].includes(event.tool_name):b.client==='antigravity'?names.some(n=>servers.some(s=>tools.some(t=>event.tool_name===`mcp_${n}_${s}_${t}`))):b.client==='codex'?servers.some(s=>tools.some(t=>event.tool_name===`mcp__${s}__${t}`)):names.some(n=>servers.some(s=>tools.some(t=>event.tool_name===`mcp__plugin_${n}_${s}__${t}`)));
   if(!matches)return;
   // Older deployed board schemas reject currentSession. Bootstrap negotiates
   // the board protocol; absent/v1 receipts must never require an unknown field.

@@ -41,6 +41,9 @@ for durable local handoff to an already configured existing worker. Selecting
 daemon mode does not install or start a daemon. The installer owns host
 eligibility, daemon installation and the user's selection. A handoff receipt is
 not an upload receipt; an upload receipt is not proof of search indexing.
+Cursor converts native content in the standalone hook in both modes and hands
+its immutable queue to the worker for durable upload. It does not enroll Cursor
+child transcripts into the older worker's independent transcript reader.
 
 Configure native MCP to the same explicit origin's `/mcp`, using the harness's
 normal authorization flow. Source packages contain an empty MCP configuration

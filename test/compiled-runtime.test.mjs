@@ -15,9 +15,11 @@ test('packaged executable captures and uploads with CLI, Node and Bun absent fro
   const invoke=(action,event)=>new Promise((resolve,reject)=>{
     const child=execFile(executable,['--root',f.root,'--action',action],{cwd:f.root,env:{...process.env,PATH:join(f.root,'empty-path')},timeout:20000},(error,stdout,stderr)=>{
       if(error||stderr.includes('unavailable'))reject(error??Error(stderr));else resolve(stdout);
-    });child.stdin.end(JSON.stringify(harness==='antigravity'?{...event,conversationId:event.session_id,transcriptPath:event.transcript_path,hookEventName:event.hook_event_name}:event));
+    });child.stdin.end(JSON.stringify(harness==='antigravity'?{...event,conversationId:event.session_id,transcriptPath:event.transcript_path,hookEventName:event.hook_event_name}:harness==='cursor'?{...event,conversation_id:event.session_id,hook_event_name:'stop'}:event));
   });
-  if(harness==='codex'){
+  if(harness==='cursor'){
+    writeFileSync(f.event.transcript_path,['user','assistant'].map(role=>JSON.stringify({role,message:{content:[{type:'text',text:'COMPILED '+role}]}})).join('\n')+'\n');
+  }else if(harness==='codex'){
     const rows=[{type:'session_meta',payload:{id:f.event.session_id}},...['user','assistant'].map(role=>({timestamp:new Date().toISOString(),type:'response_item',payload:{type:'message',id:role,role,content:[{type:role==='user'?'input_text':'output_text',text:'COMPILED '+role}]}}))];
     writeFileSync(f.event.transcript_path,rows.map(r=>JSON.stringify(r)).join('\n')+'\n');
   }else if(harness==='antigravity'){

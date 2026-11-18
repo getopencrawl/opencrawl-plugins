@@ -1,14 +1,29 @@
 {
   "schemaVersion": 1,
   "harness": "cursor",
-  "version": "0.1.0",
-  "status": "stub",
+  "version": "0.1.1",
+  "status": "ready",
   "cliRequired": false,
-  "callbacks": [],
+  "minimumHarnessVersion": "2026.11.17-f532c45",
+  "callbacks": [
+    "sessionStart",
+    "beforeSubmitPrompt",
+    "afterAgentResponse",
+    "postToolUse",
+    "postToolUseFailure",
+    "preCompact",
+    "subagentStop",
+    "stop",
+    "sessionEnd",
+    "preToolUse"
+  ],
   "capture": {
-    "minimum": false,
-    "toolInputs": false,
-    "toolOutputs": false
+    "minimum": true,
+    "toolInputs": true,
+    "toolOutputs": true
   },
-  "daemonHandoff": false
+  "daemonHandoff": true,
+  "contextSuggestions": false,
+  "nativeVerifiedPlatforms": ["darwin-arm64"],
+  "runtimeVerifiedPlatforms": ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "win32-x64"]
 }

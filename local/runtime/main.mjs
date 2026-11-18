@@ -1,12 +1,17 @@
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {binding,enrollment,recording,atomic} from './io.mjs';
+import {binding,enrollment,recording,atomic,nativeId} from './io.mjs';
 import {collect,handoff,handoffCodex,flush,observe,antigravityPrompt} from './capture.mjs';
 import {start,search,suggest,notePrompt} from './lifecycle.mjs';
 export async function invoke(root,action,event,output=process.stdout){
   const b=binding(root);enrollment(b);
   if(!event||typeof event!=='object'||Array.isArray(event))throw Error('Invalid hook input');
   if(b.client==='codex'&&event.hook_event_name==='UserPromptSubmit')event={...event,prompt_id:event.turn_id};
+  if(b.client==='cursor'){
+    const names={sessionStart:'SessionStart',beforeSubmitPrompt:'UserPromptSubmit',preToolUse:'PreToolUse'};
+    const session=event.conversation_id??event.session_id,parent=event.parent_conversation_id;
+    event={...event,nativeHookName:event.hook_event_name,hook_event_name:names[event.hook_event_name]??event.hook_event_name,session_id:session,cwd:event.cwd??event.workspace_roots?.[0],prompt_id:event.generation_id,parentSessionId:nativeId(parent)&&parent!==session?parent:undefined};
+  }
   if(b.client==='antigravity'){
     event={...event,session_id:event.conversationId,transcript_path:event.transcriptPath,cwd:event.cwd??event.workspacePaths?.[0],hook_event_name:event.hookEventName,tool_name:event.toolCall?.name,tool_input:event.toolCall?.args};
     if(['observe','suggest'].includes(action)&&event.hookEventName==='PreInvocation'){
@@ -14,9 +19,9 @@ export async function invoke(root,action,event,output=process.stdout){
       event={...event,...prompt,hook_event_name:'UserPromptSubmit'};
     }
   }
-  const format=value=>b.client!=='antigravity'?value:action==='search'?{decision:value?.hookSpecificOutput?.permissionDecision==='deny'?'deny':'allow',...(value?.hookSpecificOutput?.permissionDecisionReason?{reason:value.hookSpecificOutput.permissionDecisionReason}:{})}:value?.hookSpecificOutput?.additionalContext?{injectSteps:[{ephemeralMessage:value.hookSpecificOutput.additionalContext}]}:value;
+  const format=value=>b.client==='cursor'?(action==='search'?{permission:value?.hookSpecificOutput?.permissionDecision==='deny'?'deny':'allow',...(value?.hookSpecificOutput?.permissionDecisionReason?{agent_message:value.hookSpecificOutput.permissionDecisionReason}:{})}:{...(event.nativeHookName==='beforeSubmitPrompt'?{continue:true}:{}),...(value?.hookSpecificOutput?.additionalContext?{additional_context:value.hookSpecificOutput.additionalContext}:{})}):b.client!=='antigravity'?value:action==='search'?{decision:value?.hookSpecificOutput?.permissionDecision==='deny'?'deny':'allow',...(value?.hookSpecificOutput?.permissionDecisionReason?{reason:value.hookSpecificOutput.permissionDecisionReason}:{})}:value?.hookSpecificOutput?.additionalContext?{injectSteps:[{ephemeralMessage:value.hookSpecificOutput.additionalContext}]}:value;
   let result;
-  if(action==='observe'){if(b.client!=='antigravity')await observe(b,event);await notePrompt(b,event);return;}
+  if(action==='observe'){if(!['antigravity','cursor'].includes(b.client))await observe(b,event);await notePrompt(b,event);if(b.client==='cursor')output.write(JSON.stringify(format())+'\n');return;}
   else if(action==='start')result=await start(b,event);
   else if(action==='search')result=search(b,event);
   else if(action==='suggest'){
@@ -24,7 +29,10 @@ export async function invoke(root,action,event,output=process.stdout){
     if(suggestion?.output){suggestion.guard();await new Promise((resolve,reject)=>output.write(JSON.stringify(format(suggestion.output))+'\n',error=>error?reject(error):resolve()));suggestion.handoff();}
     await suggestion?.flush();return;
   }else if(action==='capture'){
-    if(b.captureMode==='daemon')result=b.client==='codex'?await handoffCodex(b,event):handoff(b,event);
+    // Cursor child paths are newer than the legacy daemon reader. The plugin
+    // owns conversion in both modes; the existing worker durably uploads its
+    // compatible immutable queue without a second callback conversion.
+    if(b.captureMode==='daemon')result=b.client==='cursor'?await collect(b,event):b.client==='codex'?await handoffCodex(b,event):handoff(b,event);
     else{
       if(!recording(b,event))result={selected:false};
       else{
@@ -34,9 +42,9 @@ export async function invoke(root,action,event,output=process.stdout){
         try{result.uploaded=await flush(b);}catch{result.pendingUpload=true;}
       }
     }
-    atomic(join(b.profile,'plugin-state',b.key,'status.json'),{at:new Date().toISOString(),harness:b.client,...result});return;
+    atomic(join(b.profile,'plugin-state',b.key,'status.json'),{at:new Date().toISOString(),harness:b.client,...result});if(b.client==='cursor')output.write(JSON.stringify(format())+'\n');return;
   }else throw Error('Unsupported lifecycle action');
-  if(result||b.client==='antigravity'&&action==='search')output.write(JSON.stringify(format(result))+'\n');
+  if(result||['antigravity','cursor'].includes(b.client)&&action==='search')output.write(JSON.stringify(format(result))+'\n');
 }
 if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]||process.versions.bun&&import.meta.main){
   const args=process.argv.slice(2);
@@ -49,6 +57,6 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]||process.ve
     clearTimeout(timer);await invoke(root,action,JSON.parse(bytes.toString('utf8')));
   }catch(error){
     // Report only an error class, never a response body, credential or content.
-    process.stderr.write('OpenCrawl lifecycle hook unavailable: '+(error?.name??'Error')+'\n');process.exitCode=0;
+    process.stderr.write('OpenCrawl lifecycle hook unavailable: '+(error?.name??'Error')+'\n');process.exitCode=args[3]==='search'?1:0;
   }
 }
