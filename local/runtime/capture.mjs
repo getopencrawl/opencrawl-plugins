@@ -467,6 +467,7 @@ export async function handoffCodex(b,event){
   const native=await codexEvent(b,event);if(!native)return {selected:false};
   return handoff(b,native);
 }
+import {privateSession} from './privacy.mjs';
 export async function flush(b){
   return locked(join(b.profile,hash('capture:flush')+'.json.lock'),async()=>{
     await request(b,'/api/sessions/identity',{identity:true,refresh:true});
@@ -475,11 +476,11 @@ export async function flush(b){
     for(const name of readdirSync(directory).filter(n=>/^[a-f0-9]{64}\.json$/.test(n)).slice(0,64)){
       const c=enrollment(b);if(c.disabled||!c.harnesses?.includes(b.client))break;
       const file=join(directory,name),batch=readJson(file,16*1024*1024);
-      if(batch.harness!==b.client||batch.installationId!==b.installationId||batch.owner?.tenantId!==b.owner.tenantId||batch.owner?.userId!==b.owner.userId||excluded(c,batch.sessionId,batch.cwd)||batch.parentSessionId&&excluded(c,batch.parentSessionId,batch.cwd))continue;
+      if(privateSession(b,batch.sessionId)||batch.harness!==b.client||batch.installationId!==b.installationId||batch.owner?.tenantId!==b.owner.tenantId||batch.owner?.userId!==b.owner.userId||excluded(c,batch.sessionId,batch.cwd)||batch.parentSessionId&&excluded(c,batch.parentSessionId,batch.cwd))continue;
       if(batch.attachments?.some(a=>a.status==='captured'))continue;
       // Only immutable, already-redacted batches are eligible for direct send.
       const bytes=JSON.stringify(batch);if(hash(bytes)+'.json'!==name||JSON.stringify(redact(batch.events))!==JSON.stringify(batch.events))throw Error('Queue integrity check failed');
-      const guard=()=>{const now=enrollment(b);if(now.disabled||!now.harnesses?.includes(b.client)||excluded(now,batch.sessionId,batch.cwd)||batch.parentSessionId&&excluded(now,batch.parentSessionId,batch.cwd))throw Error('Recording selection changed');};
+      const guard=()=>{const now=enrollment(b);if(privateSession(b,batch.sessionId)||now.disabled||!now.harnesses?.includes(b.client)||excluded(now,batch.sessionId,batch.cwd)||batch.parentSessionId&&excluded(now,batch.parentSessionId,batch.cwd))throw Error('Recording selection changed');};
       const receipt=await request(b,'/api/sessions/batches',{method:'POST',body:bytes,timeout:8000,refresh:true,guard});
       if(receipt.stored!==true||receipt.batchId!==hash(bytes))throw Error('Invalid capture receipt');
       const savedReceipt={at:new Date().toISOString(),...receipt,harness:b.client,installationId:b.installationId,sessionId:batch.sessionId};

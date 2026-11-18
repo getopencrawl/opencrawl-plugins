@@ -85,7 +85,7 @@
         "type": "command",
         "timeout": 2,
         "failClosed": false,
-        "matcher": "^MCP:opencrawl_search(_v1)?$"
+        "matcher": "^MCP:(opencrawl_search(_v1)?|board_post|board_presence|board_follow)$"
       }
     ]
   }

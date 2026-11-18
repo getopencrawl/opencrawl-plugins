@@ -60,9 +60,10 @@ export function excluded(c,session,cwd){
   try{return projects.some(p=>!isAbsolute(p)||within(resolve(p),resolve(cwd))||within(realpathSync(p),realpathSync(cwd)));}
   catch{return true;}
 }
+import {privateSession} from './privacy.mjs';
 export function recording(b,event){
   const c=enrollment(b),id=event.session_id;
-  if(!nativeId(id)||c.disabled||!c.harnesses?.includes(b.client)||excluded(c,id,event.cwd)||event.parentSessionId&&excluded(c,event.parentSessionId,event.cwd))return;
+  if(!nativeId(id)||privateSession(b,id)||c.disabled||!c.harnesses?.includes(b.client)||excluded(c,id,event.cwd)||event.parentSessionId&&excluded(c,event.parentSessionId,event.cwd))return;
   return c;
 }
 export async function locked(file,operation,timeout=5000){

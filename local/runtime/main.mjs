@@ -3,6 +3,7 @@ import {fileURLToPath} from 'node:url';
 import {binding,enrollment,recording,atomic,nativeId} from './io.mjs';
 import {collect,handoff,handoffCodex,flush,observe,antigravityPrompt} from './capture.mjs';
 import {start,search,suggest,notePrompt} from './lifecycle.mjs';
+import {invoked,sessionIdentity,privateSession,markPrivate,retryErasure,boardSend} from './privacy.mjs';
 export async function invoke(root,action,event,output=process.stdout){
   const b=binding(root);enrollment(b);
   if(!event||typeof event!=='object'||Array.isArray(event))throw Error('Invalid hook input');
@@ -14,12 +15,27 @@ export async function invoke(root,action,event,output=process.stdout){
   }
   if(b.client==='antigravity'){
     event={...event,session_id:event.conversationId,transcript_path:event.transcriptPath,cwd:event.cwd??event.workspacePaths?.[0],hook_event_name:event.hookEventName,tool_name:event.toolCall?.name,tool_input:event.toolCall?.args};
-    if(['observe','suggest'].includes(action)&&event.hookEventName==='PreInvocation'){
-      const prompt=antigravityPrompt(b,event);if(!prompt)return;
-      event={...event,...prompt,hook_event_name:'UserPromptSubmit'};
+    if(event.hookEventName==='PreInvocation'){
+      const prompt=antigravityPrompt(b,event);
+      if(prompt)event={...event,...prompt,hook_event_name:'UserPromptSubmit'};
+      else if(['observe','suggest'].includes(action))return;
     }
   }
   const format=value=>b.client==='cursor'?(action==='search'?{permission:value?.hookSpecificOutput?.permissionDecision==='deny'?'deny':'allow',...(value?.hookSpecificOutput?.permissionDecisionReason?{agent_message:value.hookSpecificOutput.permissionDecisionReason}:{})}:{...(event.nativeHookName==='beforeSubmitPrompt'?{continue:true}:{}),...(value?.hookSpecificOutput?.additionalContext?{additional_context:value.hookSpecificOutput.additionalContext}:{})}):b.client!=='antigravity'?value:action==='search'?{decision:value?.hookSpecificOutput?.permissionDecision==='deny'?'deny':'allow',...(value?.hookSpecificOutput?.permissionDecisionReason?{reason:value.hookSpecificOutput.permissionDecisionReason}:{})}:value?.hookSpecificOutput?.additionalContext?{injectSteps:[{ephemeralMessage:value.hookSpecificOutput.additionalContext}]}:value;
+  const session=sessionIdentity(b,event),activate=session&&invoked(b,event);
+  if(activate)markPrivate(b,session);
+  if(action==='capture'||action==='privacy'){
+    // Keep the synchronous observe hook local. Retry from later capture hooks even after this chat closes.
+    try{await retryErasure(b);}catch{process.stderr.write('OpenCrawl incognito erasure is pending.\n');}
+  }
+  if(session&&privateSession(b,session.sessionId)){
+    let reply;
+    if(action==='search'&&boardSend(event))reply={hookSpecificOutput:{hookEventName:'PreToolUse',permissionDecision:'deny',permissionDecisionReason:'This session is incognito and cannot send board messages.'}};
+    else if(action==='start'||activate&&action==='observe')reply={hookSpecificOutput:{hookEventName:event.hook_event_name,additionalContext:'OpenCrawl incognito is active locally. You MUST NOT communicate with other agents. Confirm remote erasure through the incognito skill.'}};
+    if(reply||b.client==='cursor')output.write(JSON.stringify(format(reply))+'\n');
+    return;
+  }
+  if(action==='privacy')return;
   let result;
   if(action==='observe'){if(!['antigravity','cursor'].includes(b.client))await observe(b,event);await notePrompt(b,event);if(b.client==='cursor')output.write(JSON.stringify(format())+'\n');return;}
   else if(action==='start')result=await start(b,event);
