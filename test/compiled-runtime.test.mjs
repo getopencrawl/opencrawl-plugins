@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
-import {fixture} from './runtime.test.mjs';
+import {fixture} from './fixture.mjs';
 
 const root=resolve(import.meta.dirname,'..');
 const executable=join(root,'dist/local',process.platform+'-'+process.arch,'opencrawl-hook'+(process.platform==='win32'?'.exe':''));
