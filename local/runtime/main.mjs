@@ -29,7 +29,10 @@ export async function invoke(root,action,event,output=process.stdout){
     if(suggestion?.output){suggestion.guard();await new Promise((resolve,reject)=>output.write(JSON.stringify(format(suggestion.output))+'\n',error=>error?reject(error):resolve()));suggestion.handoff();}
     await suggestion?.flush();return;
   }else if(action==='capture'){
-    if(b.captureMode==='daemon')result=b.client==='codex'?await handoffCodex(b,event):handoff(b,event);
+    // Cursor child paths are newer than the legacy daemon reader. The plugin
+    // owns conversion in both modes; the existing worker durably uploads its
+    // compatible immutable queue without a second callback conversion.
+    if(b.captureMode==='daemon')result=b.client==='cursor'?await collect(b,event):b.client==='codex'?await handoffCodex(b,event):handoff(b,event);
     else{
       if(!recording(b,event))result={selected:false};
       else{

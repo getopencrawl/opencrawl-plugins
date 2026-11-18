@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {writeFileSync,appendFileSync,readFileSync,readdirSync,statSync,unlinkSync} from 'node:fs';
-import {join} from 'node:path';
+import {writeFileSync,appendFileSync,readFileSync,readdirSync,statSync,unlinkSync,mkdirSync,symlinkSync} from 'node:fs';
+import {join,dirname} from 'node:path';
 import {fixture} from './fixture.mjs';
-import {collect,handoff} from '../local/runtime/capture.mjs';
+import {collect} from '../local/runtime/capture.mjs';
 import {atomic,hash,binding} from '../local/runtime/io.mjs';
 import {invoke} from '../local/runtime/main.mjs';
 const row=(role,text)=>JSON.stringify({role,message:{content:[{type:'text',text}]}})+'\n';
@@ -52,11 +52,32 @@ test('Cursor original MCP identity is validated without mutating inputs or inter
  assert.equal((await run({tool_input:{query:'Q',currentSession:{harness:'cursor',sessionId:f.event.session_id}}})).permission,'allow');
  assert.equal((await run({tool_name:'MCP:board_sync'})).permission,'allow');
 });
-test('Cursor daemon handoff keeps content required by its native converter and shares consent controls',async t=>{
+test('Cursor daemon mode queues converted content without network or duplicate legacy callback conversion',async t=>{
  const f=await fixture(t,'cursor');atomic(join(f.root,'.opencrawl-binding.json'),{...JSON.parse(readFileSync(join(f.root,'.opencrawl-binding.json'))),captureMode:'daemon'});
  atomic(join(f.b.capture,'config.json'),{...f.config,captureWorker:'daemon-v1'});
- const b=binding(f.root);handoff(b,hook(f,'postToolUse',{tool_name:'Shell',tool_input:'{"command":"printf TEST"}',tool_output:'TEST'}));
- const dir=join(b.capture,'daemon','inbox');const notice=JSON.parse(readFileSync(join(dir,readdirSync(dir)[0])));
- assert.equal(notice.record.harness,'cursor');assert.equal(notice.record.event.tool_output,'TEST');assert.equal(notice.record.event.hook_event_name,'postToolUse');
+ await invoke(f.root,'capture',hook(f,'postToolUse',{tool_name:'Shell',tool_input:'{"command":"printf TEST"}',tool_output:'TEST'}),{write:()=>{}});
+ assert.equal(events(f).find(e=>e.kind==='tool_result').data.output,'TEST');
  assert.equal(f.received.length,0);
+});
+test('Cursor captures children only under the selected parent and drains final replies at the parent boundary',async t=>{
+ const f=await fixture(t,'cursor'),dir=join(dirname(f.event.transcript_path),'subagents');mkdirSync(dir);
+ writeFileSync(f.event.transcript_path,row('user','PARENT'));
+ const child=join(dir,'child-1.jsonl');writeFileSync(child,row('user','DELEGATED')+row('assistant','INTERMEDIATE'));
+ await collect(f.b,hook(f,'postToolUse',{session_id:'child-1',transcript_path:child,tool_use_id:'child-tool',tool_name:'Shell',tool_input:'{"command":"printf CHILD"}',tool_output:'CHILD'}));
+ appendFileSync(child,row('assistant','FINAL'));
+ await collect(f.b,hook(f,'sessionEnd'));await collect(f.b,hook(f,'sessionEnd'));
+ const batches=f.queued().filter(b=>b.sessionId==='child-1');
+ assert(batches.every(b=>b.parentSessionId===f.event.session_id&&b.origin==='subagent'));
+ const records=batches.flatMap(b=>b.events);assert.equal(records.filter(e=>e.data.role==='assistant').length,2);
+ assert.equal(records.filter(e=>e.kind==='tool_result').length,1);
+ await assert.rejects(collect(f.b,hook(f,'postToolUse',{session_id:'child-1',transcript_path:child,parentSessionId:'other'})),/parent mismatch/);
+ if(process.platform!=='win32'){
+   symlinkSync(child,join(dir,'alias.jsonl'));
+   await assert.rejects(collect(f.b,hook(f,'postToolUse',{session_id:'alias',transcript_path:join(dir,'alias.jsonl')})),/outside/);
+   unlinkSync(join(dir,'alias.jsonl'));
+ }
+ atomic(join(f.b.capture,'config.json'),{...f.config,exclusions:{sessions:[f.event.session_id]}});
+ appendFileSync(child,row('assistant','EXCLUDED'));
+ assert.equal((await collect(f.b,hook(f,'postToolUse',{session_id:'child-1',transcript_path:child}))).selected,false);
+ assert(!JSON.stringify(events(f)).includes('EXCLUDED'));
 });

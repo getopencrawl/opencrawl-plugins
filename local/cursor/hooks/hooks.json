@@ -17,21 +17,9 @@
     ],
     "beforeSubmitPrompt": [
       {
-        "command": "\"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CURSOR_PLUGIN_ROOT}\" --action observe",
-        "type": "command",
-        "timeout": 2,
-        "failClosed": false
-      },
-      {
         "command": "\"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CURSOR_PLUGIN_ROOT}\" --action capture",
         "type": "command",
         "timeout": 15,
-        "failClosed": false
-      },
-      {
-        "command": "\"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${CURSOR_PLUGIN_ROOT}\" --action suggest",
-        "type": "command",
-        "timeout": 30,
         "failClosed": false
       }
     ],

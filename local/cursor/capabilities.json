@@ -2,8 +2,9 @@
   "schemaVersion": 1,
   "harness": "cursor",
   "version": "0.1.1",
-  "status": "candidate",
+  "status": "ready",
   "cliRequired": false,
+  "minimumHarnessVersion": "2026.11.17-f532c45",
   "callbacks": [
     "sessionStart",
     "beforeSubmitPrompt",
@@ -17,13 +18,12 @@
     "preToolUse"
   ],
   "capture": {
-    "minimum": false,
-    "toolInputs": false,
-    "toolOutputs": false
+    "minimum": true,
+    "toolInputs": true,
+    "toolOutputs": true
   },
-  "daemonHandoff": false,
-  "verification": {
-    "native": "pending-sign-in",
-    "runtimePlatforms": []
-  }
+  "daemonHandoff": true,
+  "contextSuggestions": false,
+  "nativeVerifiedPlatforms": ["darwin-arm64"],
+  "runtimeVerifiedPlatforms": ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "win32-x64"]
 }

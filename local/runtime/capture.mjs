@@ -12,7 +12,9 @@ function pathFor(b,c,event,{mustExist=true}={}){
   const base=mustExist?realpathSync(c.roots[b.client]):resolve(c.roots[b.client]),file=mustExist?realpathSync(event.transcript_path):resolve(event.transcript_path),parts=relative(base,file).split(sep);
   if(b.client==='cursor'){
     const lexical=relative(resolve(c.roots.cursor),resolve(event.transcript_path));
-    if(parts.length!==5||parts[0]!=='projects'||parts[2]!=='agent-transcripts'||parts[3]!==event.session_id||parts[4]!==event.session_id+'.jsonl'||relative(base,file)!==lexical||mustExist&&lstatSync(event.transcript_path).isSymbolicLink())throw Error('Transcript is outside the selected native session');
+    const own=parts.length===5&&parts[3]===event.session_id&&parts[4]===event.session_id+'.jsonl'&&!event.parentSessionId;
+    const child=parts.length===6&&nativeId(event.parentSessionId)&&parts[3]===event.parentSessionId&&parts[4]==='subagents'&&parts[5]===event.session_id+'.jsonl'&&event.parentSessionId!==event.session_id;
+    if(parts[0]!=='projects'||parts[2]!=='agent-transcripts'||!(own||child)||relative(base,file)!==lexical||mustExist&&lstatSync(event.transcript_path).isSymbolicLink())throw Error('Transcript is outside the selected native session');
     return file;
   }
   if(b.client==='antigravity'){
@@ -164,6 +166,34 @@ function cursorHookEvents(notice){
  * saved boundary and lock are shared with the existing installer/daemon. */
 async function collectCursor(b,event){
   const c=recording(b,event);if(!c)return {selected:false};
+  // Child tool hooks carry the child's ID but omit parent_conversation_id.
+  // Derive the parent only from the exact native subtree, then validate its
+  // real path before using it. Never discover unrelated project sessions.
+  if(isAbsolute(event.transcript_path??'')){
+    const parts=relative(resolve(c.roots.cursor),resolve(event.transcript_path)).split(sep);
+    if(parts.length===6&&parts[0]==='projects'&&parts[2]==='agent-transcripts'&&parts[4]==='subagents'&&parts[5]===event.session_id+'.jsonl'&&nativeId(parts[3])&&parts[3]!==event.session_id){
+      if(event.parentSessionId&&event.parentSessionId!==parts[3])throw Error('Native child parent mismatch');
+      event={...event,parentSessionId:parts[3]};pathFor(b,c,event,{mustExist:existsSync(event.transcript_path)});
+    }
+  }
+  if(!recording(b,event))return {selected:false};
+  const result=await collectCursorOne(b,event);
+  if(!event.parentSessionId&&isAbsolute(event.transcript_path??'')&&existsSync(event.transcript_path)){
+    pathFor(b,c,event);const dir=join(dirname(event.transcript_path),'subagents');
+    // Children do not emit their own sessionEnd. The parent's next boundary
+    // drains final child replies, including children with no tool calls.
+    if(existsSync(dir)&&!lstatSync(dir).isSymbolicLink()){
+      const names=readdirSync(dir).filter(n=>n.endsWith('.jsonl')&&nativeId(n.slice(0,-6))).slice(0,64);
+      for(const name of names){
+        const child={session_id:name.slice(0,-6),parentSessionId:event.session_id,cwd:event.cwd,transcript_path:join(dir,name),hook_event_name:'parentBoundary'};
+        if(recording(b,child))await collectCursorOne(b,child);
+      }
+    }
+  }
+  return result;
+}
+async function collectCursorOne(b,event){
+  const c=recording(b,event);if(!c)return {selected:false};
   const pending=join(b.profile,'plugin-state',b.key,'cursor-notices',hash(event.session_id));
   const native=event.nativeHookName??event.hook_event_name;
   // Only genuinely stable native IDs deduplicate callbacks. Text is not identity.
@@ -188,7 +218,8 @@ async function collectCursor(b,event){
     const notices=readdirSync(pending).filter(n=>/^[a-f0-9]{64}\.json$/.test(n)).map(n=>({file:join(pending,n),value:readJson(join(pending,n),8*1024*1024)})).sort((a,b)=>a.value.sequence-b.value.sequence).slice(0,128);
     for(const {file:noticeFile,value:notice} of notices){
       if(state.lastNotice===notice.id||state.pluginNotices[notice.id]){unlinkSync(noticeFile);continue;}
-      const e=notice.event;
+      if(notice.event.parentSessionId&&notice.event.parentSessionId!==event.parentSessionId)throw Error('Native notice parent mismatch');
+      const e={...notice.event,parentSessionId:event.parentSessionId};
       if(e.session_id!==event.session_id)throw Error('Native notice session mismatch');
       const transcript=e.transcript_path;
       if(typeof transcript==='string'&&transcript.endsWith('.jsonl')&&existsSync(transcript)){
