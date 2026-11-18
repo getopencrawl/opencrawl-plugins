@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {createServer} from 'node:http';
 import {binding,atomic,hash,excluded} from '../local/runtime/io.mjs';
 import {observe,collect,flush,handoff} from '../local/runtime/capture.mjs';
-import {request} from '../local/runtime/auth.mjs';
+import {request,replicasCredentials} from '../local/runtime/auth.mjs';
 import {search,suggest,notePrompt} from '../local/runtime/lifecycle.mjs';
 
 import {fixture} from './fixture.mjs';
@@ -192,4 +192,38 @@ test('a single final callback drains multiple bounded transcript chunks',async t
   appendFileSync(f.event.transcript_path,rows.map(r=>JSON.stringify(r)).join('\n')+'\n');
   await collect(f.b,{...f.event,hook_event_name:'Stop'});
   assert.equal(f.queued().flatMap(b=>b.events).length,140);
+});
+
+
+test('Replicas credentials are scoped to the workspace and API and renewed after rejection',async()=>{
+  const api='https://example.test',issuer='https://api.replicas.dev',subject='org:one:env:two:workspace:three';
+  const b={api,owner:{userId:'workload_replicas_'+hash(issuer+'\n'+subject)}};
+  const claims={iss:issuer,aud:api,sub:subject,organization_id:'one',environment_id:'two',workspace_id:'three',exp:Math.floor(Date.now()/1000)+300};
+  let mints=0;
+  const credential=replicasCredentials(async audience=>{
+    assert.equal(audience,api);
+    return 'header.'+Buffer.from(JSON.stringify({...claims,jti:++mints})).toString('base64url')+'.signature';
+  });
+  const first=await credential(b);
+  assert.equal(await credential(b),first);
+  assert.notEqual(await credential(b,first),first);
+  assert.equal(mints,2);
+  for(const invalid of [{aud:'https://other.test'},{iss:'https://other.test'},{workspace_id:'other'},{exp:1}]){
+    const original={...claims};Object.assign(claims,invalid);
+    await assert.rejects(credential({...b}),/Invalid Replicas/);Object.assign(claims,original);
+  }
+});
+
+test('idle workload capture performs no authentication or network request',async t=>{
+  const f=await fixture(t);
+  const workloadOwner={...f.b.owner,userId:'workload_replicas_'+'1'.repeat(64)};
+  const local=JSON.parse(readFileSync(join(f.root,'.opencrawl-binding.json')));
+  atomic(join(f.root,'.opencrawl-binding.json'),{...local,owner:workloadOwner,authMode:'replicas-workspace'});
+  atomic(join(f.b.capture,'config.json'),{...f.config,owner:workloadOwner});
+  const workload=binding(f.root);
+  assert.notEqual(workload.key,f.b.key);
+  assert.equal(await flush(workload),0);
+  assert.equal(f.received.length,0);
+  atomic(join(f.root,'.opencrawl-binding.json'),{...local,authMode:'replicas-workspace'});
+  assert.throws(()=>binding(f.root),/Invalid workload/);
 });
