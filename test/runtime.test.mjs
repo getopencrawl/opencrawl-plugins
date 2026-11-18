@@ -138,14 +138,28 @@ test('daemon mode hands off before transcript creation without authentication or
   assert(!JSON.stringify(notice).includes('not copied'));
 });
 
-test('search identity only rewrites this installed deployment MCP and preserves arguments',async t=>{
+test('Claude validates declared session identity without mutating or approving reviewed calls',async t=>{
   const f=await fixture(t),input={query:'a query',includeCurrentSession:true};
   atomic(join(f.root,'.claude-plugin/plugin.json'),{name:'opencrawl-deployment'});
   atomic(join(f.root,'.mcp.json'),{mcpServers:{'oc-local':{url:f.b.api+'/mcp'}}});
   const event={...f.event,hook_event_name:'PreToolUse',tool_input:input,tool_name:'mcp__plugin_opencrawl-deployment_oc-local__opencrawl_search_v1'};
   const result=search(f.b,event);
-  assert.deepEqual(result.hookSpecificOutput.updatedInput,{...input,currentSession:{harness:'claude-code',sessionId:f.event.session_id}});
-  assert(!result.hookSpecificOutput.permissionDecision);
+  assert.equal(result.hookSpecificOutput.permissionDecision,'deny');
+  assert(!result.hookSpecificOutput.updatedInput);
+  const currentSession={harness:'claude-code',sessionId:f.event.session_id};
+  assert(result.hookSpecificOutput.permissionDecisionReason.includes(JSON.stringify(currentSession)));
+  const declared={...input,currentSession};
+  const before=JSON.stringify(declared);
+  assert.equal(search(f.b,{...event,tool_input:declared}),undefined);
+  assert.equal(JSON.stringify(declared),before);
+  assert.equal(search(f.b,{...event,tool_input:{...declared,currentSession:{...currentSession,sessionId:'different'}}}).hookSpecificOutput.permissionDecision,'deny');
+  for(const tool of ['board_post','board_sync','board_presence','board_follow']){
+    const board={...event,tool_name:'mcp__plugin_opencrawl-deployment_oc-local__'+tool};
+    assert.equal(search(f.b,board).hookSpecificOutput.permissionDecision,'deny');
+    assert.equal(search(f.b,{...board,tool_input:declared}),undefined);
+  }
+  assert.equal(search(f.b,{...event,agent_id:'child',tool_input:declared}).hookSpecificOutput.permissionDecision,'deny');
+  assert.equal(search(f.b,{...event,agent_id:'child',tool_input:{...input,currentSession:{...currentSession,sessionId:f.event.session_id+':child'}}}),undefined);
   assert.equal(search(f.b,{...event,tool_name:'mcp__plugin_different_oc-local__opencrawl_search_v1'}),undefined);
 });
 

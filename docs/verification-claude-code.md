@@ -19,9 +19,12 @@ separate acceptance check.
   `a9022e0a26e31c321`.
 - Registration: the actual core board bootstrap handler returned the native
   session and bound workspace; Claude received the startup context.
-- Search identity: in session `1a697503-3f33-44d4-9772-00f450952b25`, the model
-  supplied only a query. The actual MCP handler received the same native session
-  in `currentSession` after PreToolUse. No permission override was returned.
+- Version0.1.1 search identity: session `1a697503-3f33-44d4-9772-00f450952b25`
+  verified argument injection. Later deployed acceptance found that rewriting a
+  board call after Claude auto review invalidated that review. Version0.1.2
+  supplies identity in SessionStart and validates the model's original arguments;
+  correct calls pass unchanged, missing/mismatched identity is denied, and no
+  call is rewritten or auto-approved.
 - Context: that session received a synthetic suggestion, the model repeated its
   otherwise unprovided marker, and telemetry reached handoff. This proves native
   delivery against a protocol fixture, not a live context model/provider call.

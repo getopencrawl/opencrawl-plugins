@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "bindingSchemaVersion": 1,
   "packages": [
-    {"harness": "claude-code", "name": "opencrawl-local-claude-code", "path": "local/claude-code", "version": "0.1.1", "capabilities": "capabilities.json"},
+    {"harness": "claude-code", "name": "opencrawl-local-claude-code", "path": "local/claude-code", "version": "0.1.2", "capabilities": "capabilities.json"},
     {"harness": "codex", "name": "opencrawl-local-codex", "path": "local/codex", "version": "0.1.0", "capabilities": "capabilities.json"},
     {"harness": "cursor", "name": "opencrawl-local-cursor", "path": "local/cursor", "version": "0.1.0", "capabilities": "capabilities.json"},
     {"harness": "antigravity", "name": "opencrawl-local-antigravity", "path": "local/antigravity", "version": "0.1.0", "capabilities": "capabilities.json"}

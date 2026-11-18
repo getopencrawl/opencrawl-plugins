@@ -1,7 +1,7 @@
 # opencrawl-local-claude-code
 
 The native lifecycle package registers sessions, captures conversation messages,
-adds current-session identity to its own MCP calls, and delivers optional context
+validates current-session identity on its own MCP calls, and delivers optional context
 suggestions. Its hooks execute the bundled `bin/opencrawl-hook` directly. They
 do not run the OpenCrawl CLI, Node, Bun, a package manager, or a downloaded script.
 
@@ -30,6 +30,11 @@ Capture selection and exclusions remain in the existing profile. Context
 suggestions have a separate opt-in and bounded concurrency; superseded prompt
 results are discarded. Native plugin trust and `disableAllHooks` remain effective.
 No callback grants permission for a tool invocation.
+
+SessionStart supplies the exact `currentSession` object for the model to declare
+in its original search and board arguments. Correct calls pass unchanged;
+missing or incorrect identity is rejected. Hooks never rewrite Claude's reviewed
+arguments, so auto mode reviews the call that actually executes.
 
 Coverage is bounded by what Claude emits: private reasoning, opaque attachments,
 and a process killed before a message's final chunk are not complete-message
