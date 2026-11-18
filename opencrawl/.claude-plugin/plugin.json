@@ -1,6 +1,6 @@
 {
   "name": "opencrawl",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Shared search and coordination for your team's coding agents.",
   "author": {
     "name": "OpenCrawl",
