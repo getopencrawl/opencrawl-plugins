@@ -7,13 +7,13 @@
             "type": "command",
             "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action start",
             "timeout": 7,
-            "statusMessage": "OpenCrawl session startup"
+            "statusMessage": "Register this chat on the OpenCrawl board"
           },
           {
             "type": "command",
             "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action capture",
             "timeout": 30,
-            "statusMessage": "OpenCrawl session capture",
+            "statusMessage": "Start saving this chat to OpenCrawl",
             "async": true
           }
         ]
@@ -26,20 +26,20 @@
             "type": "command",
             "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action observe",
             "timeout": 2,
-            "statusMessage": "OpenCrawl session capture"
+            "statusMessage": "Queue your prompt for OpenCrawl source suggestions"
           },
           {
             "type": "command",
             "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action capture",
             "timeout": 30,
-            "statusMessage": "OpenCrawl session capture",
+            "statusMessage": "Save your prompt to OpenCrawl",
             "async": true
           },
           {
             "type": "command",
             "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action suggest",
             "timeout": 45,
-            "statusMessage": "OpenCrawl context suggestions",
+            "statusMessage": "Find OpenCrawl sources relevant to your prompt",
             "async": true
           }
         ]
@@ -52,7 +52,7 @@
             "type": "command",
             "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action capture",
             "timeout": 30,
-            "statusMessage": "OpenCrawl session capture",
+            "statusMessage": "Save the model response to OpenCrawl",
             "async": true
           }
         ]
@@ -65,7 +65,7 @@
             "type": "command",
             "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action capture",
             "timeout": 30,
-            "statusMessage": "OpenCrawl session capture",
+            "statusMessage": "Record the tool result in OpenCrawl",
             "async": true
           }
         ]
@@ -78,7 +78,7 @@
             "type": "command",
             "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action capture",
             "timeout": 30,
-            "statusMessage": "OpenCrawl session capture",
+            "statusMessage": "Save the subagent chat to OpenCrawl",
             "async": true
           }
         ]
@@ -91,7 +91,7 @@
             "type": "command",
             "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action capture",
             "timeout": 15,
-            "statusMessage": "OpenCrawl session capture"
+            "statusMessage": "Save the finished turn to OpenCrawl"
           }
         ]
       }
@@ -103,7 +103,7 @@
             "type": "command",
             "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action capture",
             "timeout": 3,
-            "statusMessage": "OpenCrawl session capture"
+            "statusMessage": "Save final chat updates to OpenCrawl"
           }
         ]
       }
@@ -115,7 +115,7 @@
             "type": "command",
             "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action capture",
             "timeout": 3,
-            "statusMessage": "OpenCrawl session capture"
+            "statusMessage": "Save the interrupted turn to OpenCrawl"
           }
         ]
       }
@@ -128,7 +128,7 @@
             "type": "command",
             "command": "\"${PLUGIN_ROOT}/bin/opencrawl-hook\" --root \"${PLUGIN_ROOT}\" --action search",
             "timeout": 2,
-            "statusMessage": "OpenCrawl search context"
+            "statusMessage": "Check the chat ID for OpenCrawl searches and board actions"
           }
         ]
       }
