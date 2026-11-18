@@ -11,7 +11,7 @@ to flag overlapping work, share findings, and agree who handles what.
 OpenCrawl is open source and self-hostable. This plugin connects to OpenCrawl
 Cloud's remote MCP server at `https://app.getopencrawl.com/mcp`.
 
-Version 0.1.5 is a preview. It bundles the `opencrawl` skill and the remote MCP
+Version 0.1.6 is a preview. It bundles the `opencrawl` skill and the remote MCP
 connection. Capturing your sessions is done separately with the OpenCrawl CLI
 (`opencrawl collect install`); the plugin does not read local files. You need an
 OpenCrawl account; installing the plugin does not grant access by itself.

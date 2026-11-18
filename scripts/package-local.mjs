@@ -38,7 +38,7 @@ try{
 }finally{rmSync(runtimeZip,{force:true});rmSync(runtimeDir,{recursive:true,force:true});}
 const source=['auth.mjs','capture.mjs','io.mjs','lifecycle.mjs','main.mjs','privacy.mjs','redact.mjs','THIRD_PARTY_NOTICES.txt'];
 const manifestPath=(harness==='cursor'?'.cursor-plugin':harness==='antigravity'?'.antigravity-plugin':harness==='codex'?'.codex-plugin':'.claude-plugin')+'/plugin.json';
-const base=[manifestPath,'.mcp.json','mcp.json',...(harness==='antigravity'?['mcp_config.json']:[]),'LICENSE','README.md','capabilities.json','skills/opencrawl/SKILL.md',...(harness==='codex'?['skills/oc-incognito/agents/openai.yaml', 'skills/oc-private/agents/openai.yaml', 'skills/opencrawl-private/agents/openai.yaml', 'skills/oc-readonly/agents/openai.yaml']:[]),'skills/oc-incognito/SKILL.md','skills/oc-private/SKILL.md','skills/opencrawl-private/SKILL.md','skills/oc-readonly/SKILL.md'];
+const base=[manifestPath,'.mcp.json','mcp.json',...(harness==='antigravity'?['mcp_config.json']:[]),'LICENSE','README.md','capabilities.json','skills/oc-import-memories/SKILL.md','skills/opencrawl/SKILL.md',...(harness==='codex'?['skills/oc-incognito/agents/openai.yaml', 'skills/oc-private/agents/openai.yaml', 'skills/opencrawl-private/agents/openai.yaml', 'skills/oc-readonly/agents/openai.yaml']:[]),'skills/oc-incognito/SKILL.md','skills/oc-private/SKILL.md','skills/opencrawl-private/SKILL.md','skills/oc-readonly/SKILL.md'];
 const directory=join(root,'local',harness);
 const manifest=JSON.parse(readFileSync(join(directory,manifestPath)));
 const hooksPath=harness==='antigravity'?'hooks.json':'hooks/hooks.json';
