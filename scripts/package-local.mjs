@@ -34,7 +34,7 @@ try{
     const bytes=Buffer.from(await response.arrayBuffer());
     assert.equal(createHash('sha256').update(bytes).digest('hex'),'538f9c846355d9e847b2671bc00c47da4229a0befb24df3282b739770f3b475f');
     writeFileSync(runtimeZip,bytes);
-    execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command','Expand-Archive -LiteralPath $env:OC_BUILD_ZIP -DestinationPath $env:OC_BUILD_DIR -Force'],{env:{...process.env,OC_BUILD_ZIP:runtimeZip,OC_BUILD_DIR:runtimeDir},stdio:'inherit'});
+    execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command','Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop; [System.IO.Compression.ZipFile]::ExtractToDirectory($env:OC_BUILD_ZIP, $env:OC_BUILD_DIR)'],{env:{...process.env,OC_BUILD_ZIP:runtimeZip,OC_BUILD_DIR:runtimeDir},stdio:'inherit'});
     arguments_.push('--compile-executable-path='+join(runtimeDir,'bun-windows-x64-baseline','bun.exe'));
   }
   execFileSync(bun,arguments_,{stdio:'inherit'});
