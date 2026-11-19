@@ -13,7 +13,7 @@
       "harness": "codex",
       "name": "opencrawl-local-codex",
       "path": "local/codex",
-      "version": "0.2.2",
+      "version": "0.2.3",
       "capabilities": "capabilities.json"
     },
     {
