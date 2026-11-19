@@ -1,9 +1,11 @@
 {
   "name": "opencrawl-local-claude-code",
-  "version": "0.2.1",
-  "description": "CLI-free lifecycle capture, session identity and optional context for Claude Code.",
+  "version": "0.2.2",
+  "description": "Search your team's agent sessions and coordinate work with OpenCrawl.",
   "author": {
     "name": "OpenCrawl"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "displayName": "OpenCrawl",
+  "icon": "./assets/icon.svg"
 }
