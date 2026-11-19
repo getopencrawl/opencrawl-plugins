@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {createServer} from 'node:http';
 import {binding,atomic,hash,excluded} from '../local/runtime/io.mjs';
 import {observe,collect,flush,handoff} from '../local/runtime/capture.mjs';
-import {request} from '../local/runtime/auth.mjs';
+import {request,replicasCredentials} from '../local/runtime/auth.mjs';
 import {search,suggest,notePrompt} from '../local/runtime/lifecycle.mjs';
 
 import {fixture} from './fixture.mjs';
@@ -215,4 +215,37 @@ test('private invocation purges this chat, retries offline and denies board tool
   assert(!f.received.some(r=>r.path==='/api/sessions/batches'));
   const out=[];await invoke(f.root,'search',{...event,hook_event_name:'PreToolUse',tool_name:'mcp__plugin_opencrawl_opencrawl__board_post',tool_input:{}},{write:value=>out.push(JSON.parse(value))});
   assert.equal(out[0].hookSpecificOutput.permissionDecision,'deny');
+});
+
+test('Replicas credentials are scoped to the workspace and API and renewed after rejection',async()=>{
+  const api='https://example.test',issuer='https://api.replicas.dev',subject='org:one:env:two:workspace:three';
+  const b={api,owner:{userId:'workload_replicas_'+hash(issuer+'\n'+subject)}};
+  const claims={iss:issuer,aud:api,sub:subject,organization_id:'one',environment_id:'two',workspace_id:'three',exp:Math.floor(Date.now()/1000)+300};
+  let mints=0;
+  const credential=replicasCredentials(async audience=>{
+    assert.equal(audience,api);
+    return 'header.'+Buffer.from(JSON.stringify({...claims,jti:++mints})).toString('base64url')+'.signature';
+  });
+  const first=await credential(b);
+  assert.equal(await credential(b),first);
+  assert.notEqual(await credential(b,first),first);
+  assert.equal(mints,2);
+  for(const invalid of [{aud:'https://other.test'},{iss:'https://other.test'},{workspace_id:'other'},{exp:1}]){
+    const original={...claims};Object.assign(claims,invalid);
+    await assert.rejects(credential({...b}),/Invalid Replicas/);Object.assign(claims,original);
+  }
+});
+
+test('idle workload capture performs no authentication or network request',async t=>{
+  const f=await fixture(t);
+  const workloadOwner={...f.b.owner,userId:'workload_replicas_'+'1'.repeat(64)};
+  const local=JSON.parse(readFileSync(join(f.root,'.opencrawl-binding.json')));
+  atomic(join(f.root,'.opencrawl-binding.json'),{...local,owner:workloadOwner});
+  atomic(join(f.b.capture,'config.json'),{...f.config,owner:workloadOwner});
+  const workload=binding(f.root);
+  assert.notEqual(workload.key,f.b.key);
+  assert.equal(await flush(workload),0);
+  assert.equal(f.received.length,0);
+  assert.equal(workload.replicasWorkspace,true);
+  assert.equal(f.b.replicasWorkspace,false);
 });

@@ -26,6 +26,22 @@ jobs:
       - run: node --test test/compiled-runtime.test.mjs
       - run: node scripts/package-local.mjs cursor
       - run: node --test test/compiled-runtime.test.mjs
+      - name: Verify workspace packages on Linux
+        if: matrix.runner == 'ubuntu-24.04'
+        run: |
+          node scripts/package-local.mjs claude-code --replicas
+          node scripts/package-local.mjs codex --replicas
+          OC_TEST_REPLICAS_PACKAGES=1 node --test test/replicas-runtime.test.mjs
+      - name: Save verified Replicas packages
+        if: matrix.runner == 'ubuntu-24.04'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: replicas-linux-x64
+          path: |
+            dist/replicas/linux-x64/*-replicas-*.zip
+            dist/replicas/linux-x64/*-replicas-*.json
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: local-${{ runner.os }}-${{ runner.arch }}

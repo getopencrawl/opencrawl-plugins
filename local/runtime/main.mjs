@@ -23,15 +23,21 @@ export async function invoke(root,action,event,output=process.stdout){
   }
   const format=value=>b.client==='cursor'?(action==='search'?{permission:value?.hookSpecificOutput?.permissionDecision==='deny'?'deny':'allow',...(value?.hookSpecificOutput?.permissionDecisionReason?{agent_message:value.hookSpecificOutput.permissionDecisionReason}:{})}:{...(event.nativeHookName==='beforeSubmitPrompt'?{continue:true}:{}),...(value?.hookSpecificOutput?.additionalContext?{additional_context:value.hookSpecificOutput.additionalContext}:{})}):b.client!=='antigravity'?value:action==='search'?{decision:value?.hookSpecificOutput?.permissionDecision==='deny'?'deny':'allow',...(value?.hookSpecificOutput?.permissionDecisionReason?{reason:value.hookSpecificOutput.permissionDecisionReason}:{})}:value?.hookSpecificOutput?.additionalContext?{injectSteps:[{ephemeralMessage:value.hookSpecificOutput.additionalContext}]}:value;
   const session=sessionIdentity(b,event),activate=session&&invoked(b,event);
+  if(activate&&b.replicasWorkspace){
+    const reason='OpenCrawl incognito is unavailable on Replicas. This command cannot pause capture or erase this chat.';
+    if(action==='observe')output.write(JSON.stringify({decision:'block',reason})+'\n');
+    if(action==='privacy')output.write(JSON.stringify({hookSpecificOutput:{hookEventName:'PreToolUse',permissionDecision:'deny',permissionDecisionReason:reason}})+'\n');
+    return;
+  }
   if(activate)markPrivate(b,session);
-  if(action==='capture'||action==='privacy'){
+  if(!b.replicasWorkspace&&(action==='capture'||action==='privacy')){
     // Keep the synchronous observe hook local. Retry from later capture hooks even after this chat closes.
     try{await retryErasure(b);}catch{process.stderr.write('OpenCrawl incognito erasure is pending.\n');}
   }
   if(session&&privateSession(b,session.sessionId)){
     let reply;
-    if(action==='search'&&boardSend(event))reply={hookSpecificOutput:{hookEventName:'PreToolUse',permissionDecision:'deny',permissionDecisionReason:'This session is incognito and cannot send board messages.'}};
-    else if(action==='start'||activate&&action==='observe')reply={hookSpecificOutput:{hookEventName:event.hook_event_name,additionalContext:'OpenCrawl incognito is active locally. You MUST NOT communicate with other agents. Confirm remote erasure through the incognito skill.'}};
+    if(action==='search'&&boardSend(event))reply={hookSpecificOutput:{hookEventName:'PreToolUse',permissionDecision:'deny',permissionDecisionReason:b.replicasWorkspace?'Board messages are disabled for this previously paused chat.':'This session is incognito and cannot send board messages.'}};
+    else if(action==='start'||activate&&action==='observe')reply={hookSpecificOutput:{hookEventName:event.hook_event_name,additionalContext:b.replicasWorkspace?'An earlier OpenCrawl hook paused capture for this chat. Previously uploaded records may still exist.':'OpenCrawl incognito is active locally. You MUST NOT communicate with other agents. Confirm remote erasure through the incognito skill.'}};
     if(reply||b.client==='cursor')output.write(JSON.stringify(format(reply))+'\n');
     return;
   }
