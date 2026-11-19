@@ -43,7 +43,7 @@ const source=['auth.mjs','capture.mjs','io.mjs','lifecycle.mjs','main.mjs','priv
 const manifestPath=(harness==='cursor'?'.cursor-plugin':harness==='antigravity'?'.antigravity-plugin':harness==='codex'?'.codex-plugin':'.claude-plugin')+'/plugin.json';
 const skills=['oc-import-memories','opencrawl'];
 const privateSkills=replicas?[]:['oc-incognito','oc-private','opencrawl-private','oc-readonly'];
-const base=[manifestPath,'.mcp.json','mcp.json',...(harness==='antigravity'?['mcp_config.json']:[]),'LICENSE','README.md','capabilities.json',
+const base=[manifestPath,'assets/icon.svg','.mcp.json','mcp.json',...(harness==='antigravity'?['mcp_config.json']:[]),'LICENSE','README.md','capabilities.json',
   ...[...skills,...privateSkills].map(skill=>'skills/'+skill+'/SKILL.md'),
   ...(harness==='codex'?privateSkills.map(skill=>'skills/'+skill+'/agents/openai.yaml'):[])];
 const directory=join(root,'local',harness);

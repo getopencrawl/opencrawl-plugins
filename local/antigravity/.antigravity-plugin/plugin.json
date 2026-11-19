@@ -1,9 +1,11 @@
 {
   "name": "opencrawl-local-antigravity",
-  "version": "0.2.1",
-  "description": "CLI-free native session capture, identity and optional context for Antigravity.",
+  "version": "0.2.2",
+  "description": "Search your team's agent sessions and coordinate work with OpenCrawl.",
   "author": {
     "name": "OpenCrawl"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "displayName": "OpenCrawl",
+  "logo": "assets/icon.svg"
 }
