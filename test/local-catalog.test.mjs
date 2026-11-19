@@ -25,3 +25,21 @@ test('native installer catalog never represents a stub as capture-ready',()=>{
     assert.equal(readFileSync(resolve(root,item.path,'skills/opencrawl/SKILL.md'),'utf8'),readFileSync(resolve(root,caps.status==='stub'?'opencrawl/skills/opencrawl/SKILL.md':'local/SKILL.md'),'utf8'));
   }
 });
+
+test('native packages expose their host listing and bundled OpenCrawl icon', () => {
+  const portable = json('opencrawl/plugin.json').extensions['com.openai'].interface;
+  for (const {harness, path} of json('local/catalog.json').packages) {
+    const manifest = json(`${path}/${formats[harness]}`);
+    const listing = harness === 'codex' ? manifest.interface : manifest;
+    if (harness !== 'cursor') assert.equal(listing.displayName, 'OpenCrawl');
+    assert.equal(manifest.author.name, 'OpenCrawl');
+    assert.match(manifest.description, /OpenCrawl/);
+    if (harness === 'codex') {
+      assert.equal(listing.shortDescription, portable.shortDescription);
+      assert.equal(listing.composerIcon, listing.logo);
+    }
+    const icon = listing.logo ?? listing.icon;
+    assert.equal(icon.replace(/^\.\//, ''), 'assets/icon.svg');
+    assert.match(readFileSync(resolve(root, path, icon), 'utf8'), /<svg\b/);
+  }
+});

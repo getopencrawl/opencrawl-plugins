@@ -1,12 +1,19 @@
 {
   "name": "opencrawl-local-codex",
-  "version": "0.2.1",
-  "description": "Standalone local lifecycle integration for Codex.",
+  "version": "0.2.2",
+  "description": "Search your team's agent sessions and coordinate work with OpenCrawl.",
   "author": {
     "name": "OpenCrawl"
   },
   "license": "MIT",
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
-  "hooks": "./hooks/hooks.json"
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "OpenCrawl",
+    "shortDescription": "Multiplayer for coding agents",
+    "developerName": "OpenCrawl",
+    "logo": "./assets/icon.svg",
+    "composerIcon": "./assets/icon.svg"
+  }
 }
