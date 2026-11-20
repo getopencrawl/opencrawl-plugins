@@ -3,7 +3,7 @@ import {readFile, readdir, lstat} from 'node:fs/promises';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
 export const root = fileURLToPath(new URL('../', import.meta.url));
-export const pluginFiles = ['.antigravity-plugin/plugin.json', '.claude-plugin/plugin.json', '.mcp.json', 'LICENSE', 'README.md', 'assets/icon.png', 'mcp.json', 'mcp_config.json', 'plugin.json', 'skills/oc-incognito/agents/openai.yaml','skills/oc-private/agents/openai.yaml','skills/opencrawl-private/agents/openai.yaml','skills/oc-readonly/agents/openai.yaml', 'skills/oc-import-memories/SKILL.md','skills/opencrawl/SKILL.md','skills/oc-incognito/SKILL.md','skills/oc-private/SKILL.md','skills/opencrawl-private/SKILL.md','skills/oc-readonly/SKILL.md'].sort();
+export const pluginFiles = ['.antigravity-plugin/plugin.json', '.claude-plugin/plugin.json', '.mcp.json', 'LICENSE', 'README.md', 'assets/icon.png', 'mcp.json', 'mcp_config.json', 'plugin.json', 'skills/oc-incognito/agents/openai.yaml','skills/oc-private/agents/openai.yaml','skills/opencrawl-private/agents/openai.yaml','skills/oc-readonly/agents/openai.yaml', 'skills/oc-continue/SKILL.md','skills/oc-import-memories/SKILL.md','skills/opencrawl/SKILL.md','skills/oc-incognito/SKILL.md','skills/oc-private/SKILL.md','skills/opencrawl-private/SKILL.md','skills/oc-readonly/SKILL.md'].sort();
 const endpoint = 'https://app.getopencrawl.com/mcp';
 export function validateManifests(portable, claude, mcp, claudeMcp, agyMcp, agy) {
   for (const key of ['name', 'version', 'description', 'author', 'homepage', 'repository', 'license', 'keywords']) assert.deepEqual(portable[key], claude[key], `Host manifest mismatch: ${key}`);
@@ -43,7 +43,7 @@ export function validateListing(listing) {
   for (const prompt of listing.defaultPrompt) assert(typeof prompt === 'string' && prompt.length > 0 && prompt.length <= 128);
   assert.deepEqual([...listing.capabilities].sort(), ['Read', 'Write'], 'Board posts must be disclosed as writes');
 }
-export const cursorPluginFiles = ['.cursor-plugin/plugin.json','LICENSE','README.md','assets/icon.png','commands/setup.md','mcp.json','rules/opencrawl.mdc','skills/oc-import-memories/SKILL.md','skills/opencrawl/SKILL.md','skills/oc-incognito/SKILL.md','skills/oc-private/SKILL.md','skills/opencrawl-private/SKILL.md','skills/oc-readonly/SKILL.md'].sort();
+export const cursorPluginFiles = ['.cursor-plugin/plugin.json','LICENSE','README.md','assets/icon.png','commands/setup.md','mcp.json','rules/opencrawl.mdc','skills/oc-continue/SKILL.md','skills/oc-import-memories/SKILL.md','skills/opencrawl/SKILL.md','skills/oc-incognito/SKILL.md','skills/oc-private/SKILL.md','skills/opencrawl-private/SKILL.md','skills/oc-readonly/SKILL.md'].sort();
 export async function validateCursor(directory = root) {
   const base=resolve(directory,'opencrawl-cursor'), files=[];
   async function walk(path='') {
