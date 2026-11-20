@@ -62,8 +62,13 @@ export async function token(b,{rejected,refresh=false}={}){
     origin(endpoint.origin);if(endpoint.username||endpoint.password||endpoint.hash)throw Error('Invalid token endpoint');
     const response=await fetch(endpoint,{method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:s.auth.clientId,grant_type:'refresh_token',refresh_token:s.refreshToken})});
     const data=await json(response,65536);
-    if(typeof data.access_token!=='string'||typeof data.refresh_token!=='string'||!Number.isFinite(data.expires_in)||data.expires_in<=0)throw Error('Sign-in refresh failed');
-    const next={...s,accessToken:data.access_token,refreshToken:data.refresh_token,expiresAt:Date.now()+data.expires_in*1000};
+    if(typeof data.access_token!=='string'||!data.access_token||typeof data.refresh_token!=='string'||!data.refresh_token)throw Error('Sign-in refresh failed');
+    // As in the CLI, JWT expiry schedules renewal. The API verifies identity.
+    let exp;
+    try{exp=JSON.parse(Buffer.from(data.access_token.split('.')[1],'base64url').toString()).exp;}catch{}
+    const lifetime=Number.isFinite(data.expires_in)&&data.expires_in>0?data.expires_in:60;
+    const expiresAt=Number.isFinite(exp)?exp*1000:Date.now()+lifetime*1000;
+    const next={...s,accessToken:data.access_token,refreshToken:data.refresh_token,expiresAt};
     // Finish persisting rotating credentials before checking cancellation/binding.
     atomic(sessionFile(b),next);enrollment(b);return next.accessToken;
   },18000);

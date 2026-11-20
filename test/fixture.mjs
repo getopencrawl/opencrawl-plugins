@@ -15,7 +15,7 @@ export async function fixture(t,harness='claude-code'){
     received.push({path:req.url,auth:req.headers.authorization,body,raw});
     res.setHeader('content-type','application/json');
     if(req.url==='/token'){
-      behavior.refreshes++;res.end(JSON.stringify({access_token:'fixture-refreshed',refresh_token:'fixture-rotated',expires_in:3600}));
+      behavior.refreshes++;res.end(JSON.stringify(behavior.refreshResponse??{access_token:'fixture-refreshed',refresh_token:'fixture-rotated',expires_in:3600}));
     }else if(req.url==='/api/sessions/identity'){
       res.end(JSON.stringify({data:{principal:behavior.owner}}));behavior.afterIdentity?.();
     }else if(behavior.fail){res.statusCode=503;res.end('{}');}
