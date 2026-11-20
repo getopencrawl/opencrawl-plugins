@@ -35,7 +35,7 @@ for(const harness of ['claude-code','codex']){
         const zip=join(dir,name+'-'+version+'-'+platform+'.zip');
         const files=execFileSync('unzip',['-Z1',zip],{encoding:'utf8'}).trim().split('\n');
         const skills=files.filter(name=>name.startsWith('skills/')).sort();
-        const expected=['skills/opencrawl/SKILL.md','skills/oc-import-memories/SKILL.md'];
+        const expected=['skills/opencrawl/SKILL.md','skills/oc-continue/SKILL.md','skills/oc-import-memories/SKILL.md'];
         if(flavor==='local')for(const skill of privateSkills){
           expected.push('skills/'+skill+'/SKILL.md');
           if(harness==='codex')expected.push('skills/'+skill+'/agents/openai.yaml');

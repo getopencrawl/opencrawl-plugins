@@ -1,6 +1,6 @@
 {
   "name": "opencrawl-local-claude-code",
-  "version": "0.2.2",
+  "version": "0.2.4",
   "description": "Search your team's agent sessions and coordinate work with OpenCrawl.",
   "author": {
     "name": "OpenCrawl"

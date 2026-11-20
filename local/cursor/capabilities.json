@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "harness": "cursor",
-  "version": "0.2.2",
+  "version": "0.2.4",
   "status": "ready",
   "cliRequired": false,
   "minimumHarnessVersion": "2026.11.17-f532c45",

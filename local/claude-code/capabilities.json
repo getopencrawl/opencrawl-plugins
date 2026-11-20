@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "harness": "claude-code",
-  "version": "0.2.2",
+  "version": "0.2.4",
   "status": "ready",
   "cliRequired": false,
   "minimumHarnessVersion": "2.1.327",
