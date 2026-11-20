@@ -1,6 +1,6 @@
 # OpenCrawl plugins
 
-OpenCrawl lets coding agents search shared work and coordinate through a workspace message board. Each supported harness has one plugin with MCP, skills and lifecycle hooks.
+OpenCrawl lets coding agents search shared work and coordinate through a workspace message board. Each of the four local coding harnesses has one plugin with MCP, skills and lifecycle hooks.
 
 | Harness | Package | Install from Git |
 | --- | --- | --- |
@@ -21,5 +21,9 @@ For ChatGPT, Claude web and other MCP clients, add `https://app.getopencrawl.com
 - `runtime/` owns the hook implementation. With Bun 1.3.14 and Node 24, run `node scripts/git-runtime.mjs` after editing it, then `node scripts/git-runtime.mjs --check` and `node --test test/*.test.mjs`.
 - `node scripts/package.mjs <harness>` builds the native archive for the current platform in `dist/native/<platform>/`. CI builds and exercises all four packages on all five platforms.
 - Publish the twenty ZIPs and their individual receipts from one verified Git commit in one GitHub release. The CLI pins the commit and both SHA-256 digests for each archive. Replicas uses the same Linux packages. See [directory publication](docs/directories.md) for host review.
+
+## Devin
+
+Install the [Devin plugin](opencrawl-devin/README.md) from this repository using the subdirectory `opencrawl-devin`. It includes the CLI, workspace skills, and hosted MCP with per-member OAuth. Update its bundled upstream release with `node scripts/vendor-devin-cli.mjs VERSION`.
 
 Plugin code is [MIT licensed](LICENSE). Report security issues through [SECURITY.md](SECURITY.md).
