@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import {writeFileSync,readFileSync,readdirSync,unlinkSync} from 'node:fs';
 import {join} from 'node:path';
 import {fixture} from './fixture.mjs';
-import {collect,antigravityPrompt,handoff} from '../local/runtime/capture.mjs';
-import {atomic,binding} from '../local/runtime/io.mjs';
-import {invoke} from '../local/runtime/main.mjs';
+import {collect,antigravityPrompt,handoff} from '../runtime/capture.mjs';
+import {atomic,binding} from '../runtime/io.mjs';
+import {invoke} from '../runtime/main.mjs';
 
 const row=(step_index,type,content,extra={})=>({step_index,type,content,status:'DONE',source:type==='USER_INPUT'?'USER_EXPLICIT':'MODEL',created_at:new Date().toISOString(),...extra});
 const save=(f,rows)=>writeFileSync(f.event.transcript_path,rows.map(r=>JSON.stringify(r)).join('\n')+'\n');

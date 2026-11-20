@@ -2,7 +2,7 @@ import {mkdtempSync,mkdirSync,readFileSync,readdirSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createServer} from 'node:http';
-import {binding,atomic,hash} from '../local/runtime/io.mjs';
+import {binding,atomic,hash} from '../runtime/io.mjs';
 
 export async function fixture(t,harness='claude-code'){
   const root=mkdtempSync(join(tmpdir(),'opencrawl-hooks-test-'));
