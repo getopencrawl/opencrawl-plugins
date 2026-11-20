@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const version = process.argv[2];
 assert.match(version ?? '', /^\d+\.\d+\.\d+$/, 'Usage: node scripts/vendor-devin-cli.mjs VERSION');
-const target = fileURLToPath(new URL('../opencrawl-devin/cli/', import.meta.url));
+const target = fileURLToPath(new URL('../plugins/devin/cli/', import.meta.url));
 const release = 'https://github.com/getopencrawl/opencrawl-core/releases/download/cli-v' + version;
 async function read(url) {
   const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });

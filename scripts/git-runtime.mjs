@@ -12,6 +12,7 @@ const bun = process.env.BUN_EXECUTABLE || 'bun';
 assert.equal(execFileSync(bun, ['--version'], {encoding:'utf8'}).trim(), '1.3.14');
 const bytes = execFileSync(bun, ['build', 'runtime/main.mjs', '--target=node', '--format=esm', '--external=bun:sqlite'], {cwd:root});
 for (const item of catalog.packages) {
+  if (item.distribution === 'repository') continue;
   const dir = join(root, item.path, 'bin');
   const file = join(dir, 'opencrawl-hook.mjs');
   if (process.argv.includes('--check')) {

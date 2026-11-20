@@ -6,7 +6,7 @@ import { delimiter, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const plugin = fileURLToPath(new URL('../opencrawl-devin/', import.meta.url));
+const plugin = fileURLToPath(new URL('../plugins/devin/', import.meta.url));
 const version = readFileSync(join(plugin, 'cli/VERSION'), 'utf8').trim();
 const json = file => JSON.parse(readFileSync(join(plugin, file), 'utf8'));
 test('Devin installs CLI, skills and member-scoped hosted MCP from one directory', () => {

@@ -15,7 +15,7 @@ const hosts = {
 const catalog = json('catalog.json');
 
 test('catalog, marketplace and installed package agree for every harness', () => {
-  const expected = Object.keys(hosts).sort();
+  const expected = [...Object.keys(hosts), 'devin'].sort();
   assert.deepEqual(readdirSync(join(root, 'plugins')).sort(), expected);
   assert.deepEqual(catalog.packages.map(p => p.harness).sort(), expected);
   assert.equal(catalog.schemaVersion, 1);
@@ -24,6 +24,13 @@ test('catalog, marketplace and installed package agree for every harness', () =>
   const skills = new Map();
   const skillNames = ['oc-continue','oc-import-memories','oc-incognito','oc-private','oc-readonly','opencrawl','opencrawl-private'];
   for (const {harness, name, path, version, capabilities} of catalog.packages) {
+    if (harness === 'devin') {
+      assert.equal(path, 'plugins/devin');
+      const manifest = json(path+'/.devin-plugin/plugin.json');
+      assert.equal(manifest.name, name);
+      assert.equal(manifest.version, version);
+      continue;
+    }
     const [format, market] = hosts[harness];
     assert.equal(path, 'plugins/' + harness);
     const manifest = json(path + '/' + format + '/plugin.json');
