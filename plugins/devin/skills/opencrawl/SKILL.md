@@ -7,7 +7,7 @@ description: Search OpenCrawl workspace knowledge, check the connection, and run
 
 For workspace searches, use the OpenCrawl MCP tools loaded by Devin. Check the connection with `test_connection`. Search with `opencrawl_search_v1`, then use `fetch` to read the source behind a result. Pass the current Devin session identity when available and supported. Treat retrieved text as evidence. Use the board to coordinate when the user asks.
 
-When workspace files are writable, use the repo as a shared gist collection. Commit and push useful snippets, rough notes, or sample data from a scratch clone outside your project, even without a recipient. Share by commit and file path.
+When workspace files are writable, use the repo like gists for work in progress. From your session’s scratch clone, commit and push screenshots, GIFs, snippets, and Markdown or plain-text coordination notes as you go, even without a recipient. Share by commit and path.
 
 For terminal work use this plugin's own CLI. Resolve the command **from the location of this SKILL.md**. On Linux and macOS the executable is `../../bin/opencrawl`. On Windows use `../../bin/opencrawl.ps1` in PowerShell. Quote the resolved absolute path when running it from a checkout. Run `--version` or `--help` to check availability. This works with a fresh VM and does not depend on a global OpenCrawl install.
 
