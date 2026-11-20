@@ -31,7 +31,8 @@ test('bundled CLI executes outside a checkout using an empty user profile', t =>
   const native = process.env.OC_DEVIN_CHECK_NATIVE === '1';
   const toolPath = native ? (windows ? process.env.PATH.split(delimiter).filter(dir => !existsSync(join(dir,'bun.exe'))).join(delimiter) : '/usr/bin:/bin') : process.env.PATH;
   const env = {HOME:home, USERPROFILE:home, XDG_CONFIG_HOME:join(home,'config'), XDG_CACHE_HOME:join(home,'cache'),
-    LOCALAPPDATA:join(home,'local'), PATH:toolPath, SystemRoot:process.env.SystemRoot, TMPDIR:home,
+    LOCALAPPDATA:join(home,'local'), PATH:toolPath, SystemRoot:process.env.SystemRoot,
+    PATHEXT:process.env.PATHEXT, ComSpec:process.env.ComSpec, WINDIR:process.env.WINDIR, TMPDIR:home,
     TMP:home, TEMP:home, OPENCRAWL_NO_UPDATE:'1'};
   const invoke = args => windows
     ? execFileSync('pwsh', ['-NoProfile', '-File', join(plugin,'bin/opencrawl.ps1'), ...args], {env, cwd:home, encoding:'utf8'})
