@@ -191,6 +191,20 @@ test('simultaneous hooks rotate a saved credential only once under the shared lo
   assert(f.received.filter(r=>r.path==='/api/sessions/identity').every(r=>r.auth==='Bearer fixture-refreshed'));
 });
 
+test('a default-on prompt receives context when refresh supplies only JWT expiry',async t=>{
+  const f=await fixture(t),file=join(f.b.profile,hash(f.b.api)+'.json');
+  const exp=Math.floor(Date.now()/1000)+3600;
+  const jwt='fixture.'+Buffer.from(JSON.stringify({exp})).toString('base64url')+'.fixture';
+  f.behavior.refreshResponse={access_token:jwt,refresh_token:'fixture-new'};
+  atomic(file,{accessToken:'fixture-expired',expiresAt:0,refreshToken:'fixture-old',auth:{clientId:'fixture-client',tokenEndpoint:f.b.api+'/token'}});
+  const suggestion=await suggest(f.b,{...f.event,hook_event_name:'UserPromptSubmit',prompt_id:'renew',prompt:'Find our previous deployment decision'});
+  assert(suggestion?.output?.hookSpecificOutput?.additionalContext.includes('A prior result'));
+  suggestion.handoff();await suggestion.flush();
+  const renewed=JSON.parse(readFileSync(file));
+  assert.equal(renewed.expiresAt,exp*1000);assert.equal(renewed.refreshToken,'fixture-new');
+  assert.equal(f.behavior.refreshes,1);
+});
+
 test('a prompt receipt survives a process exit before queue publication',async t=>{
   const f=await fixture(t),id='pending-prompt';
   const at=new Date().toISOString();

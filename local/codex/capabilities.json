@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "harness": "codex",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "status": "ready",
   "cliRequired": false,
   "callbacks": [
