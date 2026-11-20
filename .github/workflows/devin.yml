@@ -2,13 +2,13 @@ name: Devin plugin
 on:
   push:
     paths:
-      - 'opencrawl-devin/**'
+      - 'plugins/devin/**'
       - 'scripts/vendor-devin-cli.mjs'
       - 'test/devin-plugin.test.mjs'
       - '.github/workflows/devin.yml'
   pull_request:
     paths:
-      - 'opencrawl-devin/**'
+      - 'plugins/devin/**'
       - 'scripts/vendor-devin-cli.mjs'
       - 'test/devin-plugin.test.mjs'
       - '.github/workflows/devin.yml'

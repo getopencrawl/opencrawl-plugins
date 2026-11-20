@@ -4,9 +4,9 @@ import {execFile, execFileSync} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fixture} from './fixture.mjs';
-import {invoke} from '../local/runtime/main.mjs';
-import {atomic, binding, hash} from '../local/runtime/io.mjs';
-import {privateSession} from '../local/runtime/privacy.mjs';
+import {invoke} from '../runtime/main.mjs';
+import {atomic, binding, hash} from '../runtime/io.mjs';
+import {privateSession} from '../runtime/privacy.mjs';
 
 const privateSkills=['oc-incognito','oc-private','oc-readonly','opencrawl-private'];
 const testArchives=process.env.OC_TEST_REPLICAS_PACKAGES==='1';
@@ -28,31 +28,18 @@ for(const harness of ['claude-code','codex']){
     let hook=run;
     if(testArchives){
       const platform=process.platform+'-'+process.arch;
-      for(const flavor of ['local','replicas']){
-        const dir=join(import.meta.dirname,'../dist',flavor,platform);
-        const name='opencrawl-local-'+harness+(flavor==='replicas'?'-replicas':'');
-        const version=JSON.parse(readFileSync(join(import.meta.dirname,'../local',harness,harness==='codex'?'.codex-plugin':'.claude-plugin','plugin.json'))).version;
-        const zip=join(dir,name+'-'+version+'-'+platform+'.zip');
-        const files=execFileSync('unzip',['-Z1',zip],{encoding:'utf8'}).trim().split('\n');
-        const skills=files.filter(name=>name.startsWith('skills/')).sort();
-        const expected=['skills/opencrawl/SKILL.md','skills/oc-continue/SKILL.md','skills/oc-import-memories/SKILL.md'];
-        if(flavor==='local')for(const skill of privateSkills){
-          expected.push('skills/'+skill+'/SKILL.md');
-          if(harness==='codex')expected.push('skills/'+skill+'/agents/openai.yaml');
-        }
-        assert.deepEqual(skills,expected.sort());
-        if(flavor==='replicas'){
-          const unpack=join(f.root,'package');
-          mkdirSync(unpack);execFileSync('unzip',['-q',zip,'-d',unpack]);
-          hook=(action,event)=>new Promise((resolve,reject)=>{
-            const child=execFile(join(unpack,'bin/opencrawl-hook'),['--root',f.root,'--action',action],(err,out,stderr)=>{
-              if(err||stderr)reject(err??Error(stderr));
-              else resolve(out?JSON.parse(out):undefined);
-            });
-            child.stdin.end(JSON.stringify(event));
-          });
-        }
-      }
+      const dir=join(import.meta.dirname,'../dist/native',platform);
+      const version=JSON.parse(readFileSync(join(import.meta.dirname,'../plugins',harness,'capabilities.json'))).version;
+      const zip=join(dir,'opencrawl-'+harness+'-'+version+'-'+platform+'.zip');
+      const unpack=join(f.root,'package');
+      mkdirSync(unpack);execFileSync('unzip',['-q',zip,'-d',unpack]);
+      hook=(action,event)=>new Promise((resolve,reject)=>{
+        const child=execFile(join(unpack,'bin/opencrawl-hook'),['--root',f.root,'--action',action],(err,out,stderr)=>{
+          if(err||stderr)reject(err??Error(stderr));
+          else resolve(out?JSON.parse(out):undefined);
+        });
+        child.stdin.end(JSON.stringify(event));
+      });
     }
 
     const prompt={...f.event,hook_event_name:'UserPromptSubmit',prompt_id:'p1',turn_id:'t1'};

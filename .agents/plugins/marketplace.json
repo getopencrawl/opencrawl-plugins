@@ -8,7 +8,7 @@
       "name": "opencrawl",
       "source": {
         "source": "local",
-        "path": "./opencrawl"
+        "path": "./plugins/codex"
       },
       "policy": {
         "installation": "AVAILABLE",

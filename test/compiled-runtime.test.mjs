@@ -6,9 +6,9 @@ import {join,resolve} from 'node:path';
 import {fixture} from './fixture.mjs';
 
 const root=resolve(import.meta.dirname,'..');
-const executable=join(root,'dist/local',process.platform+'-'+process.arch,'opencrawl-hook'+(process.platform==='win32'?'.exe':''));
+const executable=join(root,'dist/native',process.platform+'-'+process.arch,'opencrawl-hook'+(process.platform==='win32'?'.exe':''));
 test('packaged executable captures and uploads with CLI, Node and Bun absent from PATH',{skip:!existsSync(executable)},async t=>{
-  const harness=JSON.parse(readFileSync(join(root,'dist/local',process.platform+'-'+process.arch,'artifact.json'))).harness;
+  const harness=JSON.parse(readFileSync(join(root,'dist/native',process.platform+'-'+process.arch,'artifact.json'))).harness;
   const f=await fixture(t,harness);
   writeFileSync(join(f.root,'bunfig.toml'),'preload = ["./untrusted.mjs"]\n');
   writeFileSync(join(f.root,'untrusted.mjs'),'throw new Error("UNTRUSTED_PROJECT_PRELOAD");\n');

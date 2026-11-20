@@ -4,9 +4,9 @@ import {appendFileSync,writeFileSync,readFileSync,mkdirSync,readdirSync} from 'n
 import {join,dirname} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {fixture} from './fixture.mjs';
-import {atomic,binding} from '../local/runtime/io.mjs';
-import {collect,flush,handoffCodex} from '../local/runtime/capture.mjs';
-import {search} from '../local/runtime/lifecycle.mjs';
+import {atomic,binding} from '../runtime/io.mjs';
+import {collect,flush,handoffCodex} from '../runtime/capture.mjs';
+import {search} from '../runtime/lifecycle.mjs';
 
 const row=payload=>({timestamp:new Date().toISOString(),type:'response_item',payload});
 const message=(id,role,text)=>row({type:'message',id,role,content:[{type:role==='user'?'input_text':'output_text',text}]});

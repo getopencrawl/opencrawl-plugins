@@ -4,10 +4,10 @@ import {mkdtempSync,mkdirSync,readFileSync,readdirSync,symlinkSync,rmSync,append
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createServer} from 'node:http';
-import {binding,atomic,hash,excluded} from '../local/runtime/io.mjs';
-import {observe,collect,flush,handoff} from '../local/runtime/capture.mjs';
-import {request,replicasCredentials} from '../local/runtime/auth.mjs';
-import {search,suggest,notePrompt} from '../local/runtime/lifecycle.mjs';
+import {binding,atomic,hash,excluded} from '../runtime/io.mjs';
+import {observe,collect,flush,handoff} from '../runtime/capture.mjs';
+import {request,replicasCredentials} from '../runtime/auth.mjs';
+import {search,suggest,notePrompt} from '../runtime/lifecycle.mjs';
 
 import {fixture} from './fixture.mjs';
 
@@ -223,8 +223,8 @@ test('a single final callback drains multiple bounded transcript chunks',async t
 });
 
 test('private invocation purges this chat, retries offline and denies board tools after resume',async t=>{
-  const {invoke}=await import('../local/runtime/main.mjs');
-  const {privateSession,invoked}=await import('../local/runtime/privacy.mjs');
+  const {invoke}=await import('../runtime/main.mjs');
+  const {privateSession,invoked}=await import('../runtime/privacy.mjs');
   const f=await fixture(t),{b,event}=f;
   const prompt={...event,hook_event_name:'UserPromptSubmit',prompt_id:'earlier',prompt:'Earlier private capture'};
   await observe(b,prompt);assert.equal(f.queued().length,1);

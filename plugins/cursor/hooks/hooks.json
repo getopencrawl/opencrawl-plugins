@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action start",
+        "type": "command",
+        "timeout": 7,
+        "failClosed": false
+      },
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action capture",
+        "type": "command",
+        "timeout": 15,
+        "failClosed": false
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action capture",
+        "type": "command",
+        "timeout": 15,
+        "failClosed": false
+      }
+    ],
+    "afterAgentResponse": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action capture",
+        "type": "command",
+        "timeout": 15,
+        "failClosed": false
+      }
+    ],
+    "postToolUse": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action capture",
+        "type": "command",
+        "timeout": 15,
+        "failClosed": false
+      }
+    ],
+    "postToolUseFailure": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action capture",
+        "type": "command",
+        "timeout": 15,
+        "failClosed": false
+      }
+    ],
+    "preCompact": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action capture",
+        "type": "command",
+        "timeout": 15,
+        "failClosed": false
+      }
+    ],
+    "subagentStop": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action capture",
+        "type": "command",
+        "timeout": 15,
+        "failClosed": false
+      }
+    ],
+    "stop": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action capture",
+        "type": "command",
+        "timeout": 15,
+        "failClosed": false
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action capture",
+        "type": "command",
+        "timeout": 15,
+        "failClosed": false
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action search",
+        "type": "command",
+        "timeout": 2,
+        "failClosed": false,
+        "matcher": "^MCP:(opencrawl_search(_v1)?|board_post|board_presence|board_follow)$"
+      }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "opencrawl",
+  "version": "0.3.0",
+  "description": "Search your team's agent sessions and coordinate work with OpenCrawl.",
+  "author": {
+    "name": "OpenCrawl"
+  },
+  "license": "MIT",
+  "displayName": "OpenCrawl",
+  "logo": "assets/icon.svg"
+}
