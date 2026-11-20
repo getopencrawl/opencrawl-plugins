@@ -69,3 +69,7 @@ See [SECURITY.md](SECURITY.md) for security reporting.
 ## Cursor
 
 The native Cursor bundle is `opencrawl-cursor/`, selected by `.cursor-plugin/marketplace.json`. It includes MCP, retrieval guidance, setup for explicitly enrolled capture through the CLI-managed user hooks. Package both hosts with `node scripts/package.mts`. Repository publication does not claim Cursor Marketplace approval.
+
+## Devin
+
+Install the [Devin plugin](opencrawl-devin/README.md) from this repository using the subdirectory `opencrawl-devin`. It includes the CLI, workspace skills, and hosted MCP with per-member OAuth. Update its bundled upstream release with `node scripts/vendor-devin-cli.mjs VERSION`.
