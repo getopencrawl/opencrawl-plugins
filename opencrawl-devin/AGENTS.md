@@ -1,0 +1,1 @@
+Use this plugin's opencrawl skill for the OpenCrawl CLI and workspace search. It gives the path to the CLI included with the plugin. Use the configured OpenCrawl MCP connection for the signed-in member's workspace.

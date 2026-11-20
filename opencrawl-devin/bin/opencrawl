@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH= cd -P "$(dirname "$0")/.." && pwd)
+export OPENCRAWL_NO_UPDATE=1
+if command -v bun >/dev/null 2>&1; then
+  exec bun "$root/cli/opencrawl.js" "$@"
+fi
+
+# On machines without Bun, use the native installer from the same CLI release.
+version=$(cat "$root/cli/VERSION")
+cache_root=${XDG_CACHE_HOME:-"$HOME/.cache"}/opencrawl-devin/cli
+binary="$cache_root/data/opencrawl/versions/$version/opencrawl"
+if [ ! -x "$binary" ]; then
+  (
+    unset OPENCRAWL_DOWNLOAD_BASE
+    export XDG_CACHE_HOME="$cache_root/cache" XDG_DATA_HOME="$cache_root/data" OPENCRAWL_INSTALL_DIR="$cache_root/bin"
+    /bin/sh "$root/cli/install.sh" "$version" </dev/null >&2
+  )
+fi
+exec "$binary" "$@"
