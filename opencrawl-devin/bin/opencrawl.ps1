@@ -19,7 +19,7 @@ if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) {
     $env:XDG_DATA_HOME = Join-Path $cache 'data'
     $env:OPENCRAWL_INSTALL_DIR = Join-Path $cache 'bin'
     Remove-Item Env:OPENCRAWL_DOWNLOAD_BASE -ErrorAction SilentlyContinue
-    & (Join-Path $plugin 'cli/install.ps1') -Version $version 1>&2
+    & (Join-Path $plugin 'cli/install.ps1') -Version $version 6>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
   } finally {
     foreach ($key in $saved.Keys) { [Environment]::SetEnvironmentVariable($key, $saved[$key], 'Process') }
   }
