@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "harness": "antigravity",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "status": "ready",
   "cliRequired": false,
   "minimumHarnessVersion": "1.5.9",
