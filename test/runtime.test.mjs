@@ -79,10 +79,24 @@ test('native chunks mask split secrets and preserve a durable conflicting-chunk 
   await assert.rejects(observe(f.b,{...e,index:0,delta:'different',final:false}),/conflict/);
 });
 
-test('context is opt-in and a duplicate prompt cannot start another billable check',async t=>{
+test('the native runtime honors old allowlists and CLI account-specific overrides',async t=>{
+  const f=await fixture(t),event={...f.event,hook_event_name:'UserPromptSubmit',prompt_id:'overrides',prompt:'A question'};
+  const dir=join(f.b.profile,'context-checks'),old=join(dir,hash(f.b.api)+'.json');
+  const scoped=join(dir,hash(JSON.stringify([f.b.api,f.b.installationId,f.b.owner.tenantId,f.b.owner.userId]))+'.json');
+  const saved={...f.config,revision:'saved-1',harnesses:[]};
+  atomic(old,saved);assert.equal(await suggest(f.b,event),undefined);
+  atomic(old,{...saved,installationId:'other-install'});
+  atomic(scoped,{...saved,choices:{[f.b.client]:false}});assert.equal(await suggest(f.b,event),undefined);
+  assert.equal(f.received.length,0);
+  atomic(scoped,{...saved,choices:{cursor:false}});
+  const result=await suggest(f.b,event);assert(result.output);
+});
+
+test('recording enables context by default and a duplicate prompt cannot start another billable check',async t=>{
   const f=await fixture(t),event={...f.event,hook_event_name:'UserPromptSubmit',prompt_id:'prompt-1',prompt:'A question'};
+  atomic(join(f.b.capture,'config.json'),{...f.config,disabled:true});
   assert.equal(await suggest(f.b,event),undefined);assert.equal(f.received.length,0);
-  atomic(join(f.b.profile,'context-checks',hash(f.b.api)+'.json'),{...f.config,revision:'revision-1'});
+  atomic(join(f.b.capture,'config.json'),f.config);
   const first=await suggest(f.b,event);assert(first.output,JSON.stringify(first.diagnostic));first.handoff();await first.flush();
   const second=await suggest(f.b,event);assert(!second.output);
   assert.equal(f.received.filter(x=>x.path==='/api/context/suggestions').length,1);

@@ -19,7 +19,7 @@ Configure this plugin's native MCP server in `mcp_config.json` to the same `/mcp
 SessionStart supplies native identity to declare in original MCP arguments.
 Hooks validate without rewriting or granting permission. Legacy board schemas
 use their declared agent field. Unrelated MCP calls retain normal native policy.
-Context suggestions are separately opt-in and delivered through PreInvocation.
+Context suggestions default on for clients recording new sessions and delivered through PreInvocation.
 
 Direct capture keeps failed uploads in the existing private queue for a later
 hook. Optional daemon mode sends only native path/session notices to an existing

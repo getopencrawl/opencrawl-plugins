@@ -47,9 +47,21 @@ export function search(b,event){
   return {hookSpecificOutput:{hookEventName:'PreToolUse',permissionDecision:'deny',permissionDecisionReason:`OpenCrawl session identity is missing or incorrect. Declare currentSession: ${JSON.stringify(currentSession)} in the original tool arguments so native review covers the actual call. This hook has not changed or executed the call; normal tool permissions still apply.`}};
 }
 function settings(b){
-  const c=enrollment(b),s=readJson(join(b.profile,'context-checks',hash(b.api)+'.json'),8192,{missing:true});
-  if(!s||s.schemaVersion!==1||typeof s.revision!=='string'||s.api!==b.api||s.installationId!==b.installationId||s.owner?.tenantId!==b.owner.tenantId||s.owner?.userId!==b.owner.userId||!s.harnesses?.includes(b.client))return;
-  return {c,s};
+  const c=enrollment(b),dir=join(b.profile,'context-checks');
+  const keys=[hash(b.api),hash(JSON.stringify([b.api,b.installationId,b.owner.tenantId,b.owner.userId]))];
+  for(const key of keys){
+    const s=readJson(join(dir,key+'.json'),8192,{missing:true});
+    if(!s)continue;
+    if(typeof s.revision!=='string'||s.schemaVersion!==1||!Array.isArray(s.harnesses)||!object(s.owner))return;
+    if(s.api!==b.api||s.installationId!==b.installationId||s.owner.tenantId!==b.owner.tenantId||s.owner.userId!==b.owner.userId)continue;
+    // A legacy allowlist is a complete saved selection. New choices override
+    // only the named clients so other clients still follow future recording.
+    if(s.choices===undefined)return s.harnesses.includes(b.client)?{c,s}:undefined;
+    if(!object(s.choices)||Object.values(s.choices).some(value=>typeof value!=='boolean'))return;
+    const enabled=s.choices[b.client]??(!c.disabled&&c.harnesses?.includes(b.client)===true);
+    return enabled?{c,s}:undefined;
+  }
+  if(!c.disabled&&c.harnesses?.includes(b.client))return {c,s:{revision:'recording-default-v1'}};
 }
 export async function notePrompt(b,event){
   if(event.hook_event_name!=='UserPromptSubmit')return;

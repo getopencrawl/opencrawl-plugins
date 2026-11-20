@@ -27,7 +27,7 @@ session path to an existing configured worker, which keeps reading and uploading
 independently. This package never installs or starts a background service.
 
 Capture selection and exclusions remain in the existing profile. Context
-suggestions have a separate opt-in and bounded concurrency; superseded prompt
+suggestions default on for clients recording new sessions and have bounded concurrency; superseded prompt
 results are discarded. Native plugin trust and `disableAllHooks` remain effective.
 No callback grants permission for a tool invocation.
 

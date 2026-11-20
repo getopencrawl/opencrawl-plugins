@@ -22,7 +22,7 @@ The daemon is useful when a laptop loses connectivity after its last hook.
 Selecting daemon mode does not install or start it. Exclusions and recording
 consent are checked before capture and again before upload.
 
-Context suggestions are separately opt-in. SessionStart supplies the native
+Context suggestions default on for clients recording new sessions. SessionStart supplies the native
 identity for the model to declare in this installation's same-origin MCP calls.
 Hooks validate identity and leave correct arguments unchanged; missing or wrong
 identity is denied without rewriting or approving a call. Legacy board schemas
