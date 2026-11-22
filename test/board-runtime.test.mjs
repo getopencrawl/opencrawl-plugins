@@ -22,7 +22,8 @@ async function session(t, harness = 'claude-code', enabled = true) {
   }
   const start = () => call('start', 'SessionStart');
   const registration = await start();
-  assert.equal(registration.hookSpecificOutput.additionalContext.includes('automatic at active hooks'), enabled);
+  assert.equal(registration.hookSpecificOutput.additionalContext.includes('will confirm automatic delivery'), enabled);
+  assert(!registration.hookSpecificOutput.additionalContext.includes('automatic at active hooks'));
   const file = join(f.b.profile, 'plugin-state', f.b.key, 'board', hash(f.event.session_id) + '.json');
   const set = fields => atomic(file, {...readJson(file), ...fields});
   const inbox = (kind = 'PostToolUse', fields) => call('inbox', kind, fields);
@@ -35,10 +36,12 @@ test('parallel active hooks offer a complete page once, leave it pending and ret
   const f = await session(t);
   f.behavior.page = page;
   const notices = (await Promise.all(Array.from({length: 12}, () => f.inbox()))).filter(Boolean);
-  assert.equal(notices.length, 1);
-  const output = notices[0].hookSpecificOutput;
+  assert.equal(notices.filter(n => n.hookSpecificOutput.additionalContext.includes('automatic at active hooks')).length, 1);
+  const pages = notices.filter(n => n.hookSpecificOutput.additionalContext.includes('Fixture mail'));
+  assert.equal(pages.length, 1);
+  const output = pages[0].hookSpecificOutput;
   assert.equal(output.hookEventName, 'PostToolUse');
-  assert.deepEqual(JSON.parse(output.additionalContext.split('\n')[1]), page);
+  assert.deepEqual(JSON.parse(output.additionalContext.split('\n').at(-1)), page);
   assert.equal(f.requests().length, 1);
   assert.deepEqual(f.requests()[0].body, {workspace: f.b.owner.tenantId, currentSession: {harness: f.b.client, sessionId: f.event.session_id}});
   assert(!JSON.stringify(readJson(f.file)).includes('Fixture mail'));
@@ -58,6 +61,7 @@ test('old servers and child sessions make zero inbox requests and empty steps st
   await f.start();
   assert.equal(await f.inbox('PostToolUse', {agent_id: 'other-session'}), undefined);
   assert.equal(f.requests().length, 0);
+  assert.match((await f.inbox()).hookSpecificOutput.additionalContext, /automatic at active hooks/);
   for (let step = 0; step < 20; step++) assert.equal(await f.inbox(), undefined);
   assert.equal(f.requests().length, 1);
 });
@@ -73,6 +77,9 @@ test('a large page exposes IDs only and supplies no cursor to acknowledge incomp
 
 test('account changes, incognito and expired foreground credentials cannot expose mail', async t => {
   const f = await session(t);
+  await f.inbox();
+  f.received.length = 0;
+  f.set({next: 0});
   f.behavior.owner = {...f.b.owner, userId: 'another-account'};
   assert.equal(await f.inbox(), undefined);
   assert.equal(f.requests().length, 0);
@@ -95,7 +102,7 @@ test('account changes, incognito and expired foreground credentials cannot expos
 
 test('Codex checks once at Stop even after an empty prompt, then lets the same page stop normally', async t => {
   const f = await session(t, 'codex');
-  assert.equal(await f.inbox('UserPromptSubmit'), undefined);
+  assert.match((await f.inbox('UserPromptSubmit')).hookSpecificOutput.additionalContext, /automatic at active hooks/);
   f.behavior.page = page;
   const decision = await f.inbox('Stop');
   assert.equal(decision.decision, 'block');
@@ -133,6 +140,9 @@ test('Claude drops a late fetch on session end, can resume and wakes only once p
 test('idle expiry and unavailable board leave pending mail available for the next active step', async t => {
   const f = await session(t);
   f.behavior.page = page;
+  await f.inbox();
+  await f.start();
+  f.set({confirmed: true});
   f.behavior.beforeInbox = () => delay(150);
   assert.equal(await f.stop(70), undefined);
   f.behavior.beforeInbox = undefined;

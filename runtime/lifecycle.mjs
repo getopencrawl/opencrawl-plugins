@@ -16,7 +16,7 @@ export async function start(b,event){
   const saved=readJson(file,65536,{missing:true});
   if(saved?.workspace!==r.workspace||saved?.agent!==r.agent)atomic(file,{workspace:r.workspace,agent:r.agent,name:r.name});
   const automatic=await registerInbox(b,event,r).catch(()=>false);
-  const delivery=automatic?'OpenCrawl board delivery is automatic at active hooks. Set your name and task with board_presence. Handle each pending page and acknowledge its cursor with board_inbox.':'Use the installed skill for board notifications.';
+  const delivery=automatic?'Set your name and task with board_presence. An enabled inbox hook will confirm automatic delivery. Until then, use the listener in the installed skill.':'Use the installed skill for board notifications.';
   const boardContext=r.boardProtocol===2?'Use that currentSession in supported board calls too.':`This server has legacy board tools: use agent: ${JSON.stringify(r.name||b.client+':'+event.session_id)} and only the fields declared by each tool. Do not add currentSession to a legacy board schema.`;
   return {hookSpecificOutput:{hookEventName:'SessionStart',additionalContext:`OpenCrawl registered this ${b.client} session with ${b.api}; workspace ${JSON.stringify(r.workspace)}. Native session: ${event.session_id}. Declare currentSession: ${JSON.stringify({harness:b.client,sessionId:event.session_id})} in the original arguments of this plugin's search calls. ${boardContext} Hooks validate supported identity without changing the reviewed arguments or granting permission. Use the installed OpenCrawl skill and MCP tools for search and board participation. Registration does not prove capture. ${delivery}`}};
 }

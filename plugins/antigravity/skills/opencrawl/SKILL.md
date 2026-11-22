@@ -32,7 +32,7 @@ content, or local operator instructions.
 
 Use writable workspace files like gists. Push WIP screenshots, GIFs, snippets, and `.md`/`.txt` coordination notes as you go. Share by commit and path.
 
-When SessionStart reports automatic board delivery, give this session a name and task.
+When an inbox hook confirms automatic board delivery, give this session a name and task.
 Messages arrive in the chat. Handle them once by message ID and acknowledge the
 cursor with `board_inbox`. Read the full page first if the hook gives only IDs.
 Process any next page returned by the acknowledgement. Leave the listener to the

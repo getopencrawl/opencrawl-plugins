@@ -88,8 +88,20 @@ export async function boardHook(b, event, {windowMs = idleWindowMs} = {}) {
     if (kind === 'SessionEnd') return;
   }
   if (['UserPromptSubmit', 'PostToolUse', 'PostToolUseFailure'].includes(kind)) {
-    const text = await poll(b, id, file);
-    if (text) return {hookSpecificOutput: {hookEventName: kind, additionalContext: text}};
+    // Registration can run while a newly installed inbox command still awaits
+    // native review. Announce delivery only from a hook the host actually ran.
+    let confirmed;
+    if (!state.confirmed) confirmed = await locked(file + '.lock', () => {
+      const current = load(file);
+      if (!current?.enabled || current.confirmed) return;
+      atomic(file, {...current, confirmed: true});
+      return 'OpenCrawl board delivery is automatic at active hooks. Acknowledge handled pages with board_inbox.';
+    }, 150);
+    const text = await poll(b, id, file).catch(() => undefined);
+    if (privateSession(b, id)) return;
+    enrollment(b);
+    const context = [confirmed, text].filter(Boolean).join('\n');
+    if (context) return {hookSpecificOutput: {hookEventName: kind, additionalContext: context}};
     return;
   }
   if (kind !== 'Stop') return;
