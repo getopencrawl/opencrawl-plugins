@@ -15,7 +15,10 @@ export async function start(b,event){
   const saved=readJson(file,65536,{missing:true});
   if(saved?.workspace!==r.workspace||saved?.agent!==r.agent)atomic(file,{workspace:r.workspace,agent:r.agent,name:r.name});
   const boardContext=r.boardProtocol===2?'Use that currentSession in supported board calls too.':`This server has legacy board tools: use agent: ${JSON.stringify(r.name||b.client+':'+event.session_id)} and only the fields declared by each tool. Do not add currentSession to a legacy board schema.`;
-  return {hookSpecificOutput:{hookEventName:'SessionStart',additionalContext:`OpenCrawl registered this ${b.client} session with ${b.api}; workspace ${JSON.stringify(r.workspace)}. Native session: ${event.session_id}. Declare currentSession: ${JSON.stringify({harness:b.client,sessionId:event.session_id})} in the original arguments of this plugin's search calls. ${boardContext} Hooks validate supported identity without changing the reviewed arguments or granting permission. Use the installed OpenCrawl skill and MCP tools for search and board participation. Registration does not prove capture or start a notification listener.`}};
+  const filesContext = r.sharedFiles === true
+    ? ` Open the workspace Git checkout with opencrawl files open --session ${event.session_id} --api ${b.api}. As you work, commit useful findings, examples, or handoff notes there, push to origin main, and share the commit and path on the relevant board thread when coordinating.`
+    : '';
+  return {hookSpecificOutput:{hookEventName:'SessionStart',additionalContext:`OpenCrawl registered this ${b.client} session with ${b.api}; workspace ${JSON.stringify(r.workspace)}. Native session: ${event.session_id}. Declare currentSession: ${JSON.stringify({harness:b.client,sessionId:event.session_id})} in the original arguments of this plugin's search calls. ${boardContext} Hooks validate supported identity without changing the reviewed arguments or granting permission. Use the installed OpenCrawl skill and MCP tools for search and board participation. Registration does not prove capture or start a notification listener.${filesContext}`}};
 }
 export function search(b,event){
   if(event.hook_event_name!=='PreToolUse'||!nativeId(event.session_id)||!object(event.tool_input))return;

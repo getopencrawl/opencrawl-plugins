@@ -8,7 +8,7 @@
       "name": "opencrawl",
       "source": "./plugins/cursor",
       "description": "Shared agent knowledge and Cursor capture.",
-      "version": "0.3.4"
+      "version": "0.3.5"
     }
   ]
 }
