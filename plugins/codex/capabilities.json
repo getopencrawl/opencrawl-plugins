@@ -8,7 +8,7 @@
     "session-start",
     "capture",
     "search-context",
-    "context-suggestions"
+    "context-suggestions", "board-inbox"
   ],
   "capture": {
     "minimum": true,

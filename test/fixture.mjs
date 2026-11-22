@@ -19,6 +19,11 @@ export async function fixture(t,harness='claude-code'){
     }else if(req.url==='/api/sessions/identity'){
       res.end(JSON.stringify({data:{principal:behavior.owner}}));behavior.afterIdentity?.();
     }else if(behavior.fail){res.statusCode=503;res.end('{}');}
+    else if(req.url==='/api/board/bootstrap'&&behavior.registration)res.end(JSON.stringify({data:behavior.registration}));
+    else if(req.url==='/api/board/v2/inbox'&&behavior.page){
+      await behavior.beforeInbox?.();
+      res.end(JSON.stringify({data:behavior.page}));
+    }
     else if(req.url==='/api/board/incognito')res.end(JSON.stringify({data:{session:body.currentSession,boardBlocked:true,deleted:false,pending:true}}));
     else if(req.url==='/api/sessions/batches')res.end(JSON.stringify({data:{stored:true,batchId:hash(raw),eventCount:body.events.length}}));
     else if(req.url==='/api/context/suggestions'){await behavior.beforeSuggestion?.();res.end(JSON.stringify({data:{results:[{id:'source1',title:'Evidence',text:'A prior result',offset:0}],outputTokens:10,checkId:'12345678-1234-1234-1234-123456789abc'}}));}

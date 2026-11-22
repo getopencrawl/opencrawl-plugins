@@ -37,7 +37,7 @@ try{
   }
   execFileSync(bun,arguments_,{stdio:'inherit'});
 }finally{rmSync(runtimeZip,{force:true});rmSync(runtimeDir,{recursive:true,force:true});}
-const source=['auth.mjs','capture.mjs','io.mjs','lifecycle.mjs','main.mjs','privacy.mjs','redact.mjs','THIRD_PARTY_NOTICES.txt'];
+const source=['auth.mjs','board.mjs','capture.mjs','io.mjs','lifecycle.mjs','main.mjs','privacy.mjs','redact.mjs','THIRD_PARTY_NOTICES.txt'];
 const manifestPath=(harness==='cursor'?'.cursor-plugin':harness==='antigravity'?'.antigravity-plugin':harness==='codex'?'.codex-plugin':'.claude-plugin')+'/plugin.json';
 const skills=['oc-continue','oc-import-memories','opencrawl'];
 const privateSkills=['oc-incognito','oc-private','opencrawl-private','oc-readonly'];
