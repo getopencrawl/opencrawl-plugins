@@ -9,7 +9,7 @@
       "name": "opencrawl",
       "source": "./plugins/claude-code",
       "description": "Shared search and coordination for your team's coding agents.",
-      "version": "0.3.3",
+      "version": "0.3.4",
       "license": "MIT"
     }
   ],
