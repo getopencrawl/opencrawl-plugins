@@ -4,12 +4,16 @@ on:
     paths:
       - 'plugins/devin/**'
       - 'scripts/vendor-devin-cli.mjs'
+      - 'runtime/devin/**'
+      - 'scripts/devin-context-runtime.mjs'
       - 'test/devin-plugin.test.mjs'
       - '.github/workflows/devin.yml'
   pull_request:
     paths:
       - 'plugins/devin/**'
       - 'scripts/vendor-devin-cli.mjs'
+      - 'runtime/devin/**'
+      - 'scripts/devin-context-runtime.mjs'
       - 'test/devin-plugin.test.mjs'
       - '.github/workflows/devin.yml'
 permissions:
@@ -34,3 +38,8 @@ jobs:
         run: node --test test/devin-plugin.test.mjs
         env:
           OC_DEVIN_CHECK_NATIVE: '1'
+      - name: Verify stock Linux hooks and reproducible release binaries
+        if: runner.os == 'Linux'
+        run: |
+          GOTOOLCHAIN=go1.26.5 go test ./runtime/devin/main.go ./runtime/devin/main_test.go
+          node scripts/devin-context-runtime.mjs --check

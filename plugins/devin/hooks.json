@@ -1,0 +1,26 @@
+{
+  "SessionStart": [
+    {
+      "matcher": "",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "/bin/sh \"$PLUGIN_ROOT/bin/opencrawl-context\"",
+          "timeout": 5
+        }
+      ]
+    }
+  ],
+  "UserPromptSubmit": [
+    {
+      "matcher": "",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "/bin/sh \"$PLUGIN_ROOT/bin/opencrawl-context\"",
+          "timeout": 5
+        }
+      ]
+    }
+  ]
+}
