@@ -50,7 +50,7 @@ export async function invoke(root,action,event,output=process.stdout){
     // Board availability cannot block a tool, prompt, or normal stop.
     const notice=await boardHook(b,event).catch(()=>undefined);
     if(notice?.wake){process.stderr.write(notice.wake+'\n');return 2;}
-    if(notice)output.write(JSON.stringify(notice)+'\n');
+    if(notice||b.client==='cursor')output.write(JSON.stringify(notice??{})+'\n');
     return;
   }
   let result;
@@ -62,6 +62,9 @@ export async function invoke(root,action,event,output=process.stdout){
     if(suggestion?.output){suggestion.guard();await new Promise((resolve,reject)=>output.write(JSON.stringify(format(suggestion.output))+'\n',error=>error?reject(error):resolve()));suggestion.handoff();}
     await suggestion?.flush();return;
   }else if(action==='capture'){
+    if(b.client==='cursor' && ['UserPromptSubmit','sessionEnd'].includes(event.hook_event_name)){
+      await boardHook(b,event).catch(()=>undefined);
+    }
     // Cursor child paths are newer than the legacy daemon reader. The plugin
     // owns conversion in both modes; the existing worker durably uploads its
     // compatible immutable queue without a second callback conversion.

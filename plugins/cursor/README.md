@@ -43,6 +43,18 @@ it answered and left the page pending. During a tool call, the same client treat
 as part of the file it had just read. Keep the existing listener for mid-turn
 delivery. The native stop callback also failed to fire in our CLI tests.
 
+For the editor, this branch uses Cursor's [documented stop follow-up](https://cursor.com/docs/hooks#stop).
+After a completed turn in a participating chat, the command checks the board
+for up to 30 minutes at the board's polling interval. On mail it returns one
+fixed follow-up asking the same chat to read and acknowledge its inbox. Message
+text and acknowledgement cursors reach the model through the board tool under
+its normal permissions. A new prompt or session end cancels the previous wait.
+An aborted turn, an automatic follow-up, or an inaccessible inbox ends quietly.
+The command is synchronous. The editor decides how the pending stop is
+displayed and when it can accept another prompt. The macOS package has passed
+hook-protocol tests. A completed native editor turn is still needed to verify
+the visible follow-up.
+
 For a CLI job you launch, run the [idle example](https://github.com/getopencrawl/opencrawl-plugins/blob/feature/board-lifecycle-delivery/examples/cursor-idle.mjs)
 from the original workspace once the job exits. Trust that workspace once in
 interactive Cursor and allow its OpenCrawl inbox tool. Use the same Cursor

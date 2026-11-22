@@ -223,3 +223,63 @@ test('Cursor startup signals pending IDs for its own registered chat and leaves 
   assert.doesNotMatch(await start(), /board mail is waiting/);
   assert.equal(reads().length,count+1);
 });
+
+test('Cursor stop waits for pending IDs, returns a fixed follow-up once and never acknowledges for the model', {timeout:8000}, async t => {
+  const f = await fixture(t, 'cursor');
+  const session = f.event.session_id;
+  f.behavior.registration = {session, workspace: f.b.owner.tenantId, agent:'b'.repeat(64),
+    boardProtocol:2, boardInbox:true, pollAfterMs:1000};
+  f.behavior.page = {ids:[]};
+  const event = (name, fields = {}) => ({hook_event_name:name, conversation_id:session, ...fields});
+  const sink = {write() {}};
+  await invoke(f.root, 'start', event('sessionStart'), sink);
+  const stop = {session_id:session, hook_event_name:'stop', status:'completed', loop_count:0};
+  const reads = () => f.received.filter(r=>r.path==='/api/board/v2/inbox');
+  for (const fields of [{status:'aborted'}, {status:'error'}, {loop_count:1}, {parentSessionId:'parent'}]) {
+    assert.equal(await boardHook(f.b,{...stop,...fields},{windowMs:20}),undefined);
+  }
+  assert.equal(reads().length,0);
+  const waited = boardHook(f.b,stop,{windowMs:2200});
+  while (!reads().length) await delay(10);
+  f.behavior.page = {ids:[9],cursor:page.cursor,messages:page.messages};
+  const output = await waited;
+  assert.match(output.followup_message,/board_inbox/);
+  assert(!JSON.stringify(output).includes(page.cursor) && !JSON.stringify(output).includes('Fixture mail'));
+  assert(reads().every(r=>r.body.noticeOnly===true && r.body.currentSession.sessionId===session && !r.body.acknowledge));
+  assert.equal(await boardHook(f.b,stop,{windowMs:50}),undefined);
+  f.behavior.page = {ids:[10]};
+  await invoke(f.root,'start',event('sessionStart'),sink);
+  let json = '';
+  await invoke(f.root,'inbox',event('stop',{status:'completed',loop_count:0}),{write:chunk=>{json+=chunk;}});
+  assert.deepEqual(JSON.parse(json),output);
+});
+
+test('Cursor drops stale stop output on new input, session end, privacy or loss of board access', {timeout:8000}, async t => {
+  const f=await fixture(t,'cursor'), session=f.event.session_id;
+  f.behavior.registration={session,workspace:f.b.owner.tenantId,agent:'b'.repeat(64),boardProtocol:2,boardInbox:true};
+  f.behavior.page={ids:[1]};
+  const call=(action,name,extra={})=>invoke(f.root,action,{hook_event_name:name,conversation_id:session,...extra},{write(){}});
+  const stop=()=>boardHook(f.b,{hook_event_name:'stop',session_id:session,status:'completed',loop_count:0},{windowMs:900});
+  await call('start','sessionStart');
+  await call('capture','beforeSubmitPrompt',{generation_id:'new-turn'});
+  const count=f.received.length;
+  assert.equal(await stop(),undefined);
+  assert.equal(f.received.length,count);
+  await call('start','sessionStart');
+  f.behavior.fail=true;
+  assert.equal(await stop(),undefined);
+  f.behavior.fail=false;
+  for(const boundary of ['beforeSubmitPrompt','sessionEnd','privacy']){
+    await call('start','sessionStart');
+    let release,started;
+    const active=new Promise(resolve=>{started=resolve;});
+    const response=new Promise(resolve=>{release=resolve;});
+    f.behavior.beforeInbox=()=>{started();return response;};
+    const pending=stop();
+    await active;
+    if(boundary==='privacy')markPrivate(f.b,{harness:'cursor',sessionId:session});
+    else await call('capture',boundary);
+    release();
+    assert.equal(await pending,undefined);
+  }
+});
