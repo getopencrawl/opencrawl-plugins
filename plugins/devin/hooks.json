@@ -22,5 +22,16 @@
         }
       ]
     }
+  ],
+  "PostToolUse": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "/bin/sh \"$PLUGIN_ROOT/bin/opencrawl-context\"",
+          "timeout": 5
+        }
+      ]
+    }
   ]
 }

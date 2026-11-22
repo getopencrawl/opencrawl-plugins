@@ -34,11 +34,15 @@ func TestOpeningAndFollowup(t *testing.T) {
 			t.Fatal(output)
 		}
 	}
+	tool := event{Name: "PostToolUse", Session: sid, Turn: "first-id", Tool: "exec"}
+	if !strings.Contains(invoke(t, tool), "devin-prompt:first-id") || invoke(t, tool) != "" {
+		t.Fatal("opening reminder must use its real event and fire only once")
+	}
 	next := invoke(t, prompt)
 	if !strings.Contains(next, "devin-prompt:second-id") || strings.Contains(next, prompt.Prompt) {
 		t.Fatal(next)
 	}
-	for _, output := range []string{invoke(t, prompt), invoke(t, startup), invoke(t, event{}, "opening", sid)} {
+	for _, output := range []string{invoke(t, prompt), invoke(t, tool), invoke(t, startup), invoke(t, event{}, "opening", sid)} {
 		if output != "" {
 			t.Fatal("stale or duplicate cue", output)
 		}

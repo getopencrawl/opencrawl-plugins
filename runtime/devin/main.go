@@ -25,6 +25,7 @@ var privacy = regexp.MustCompile(`(?i)^\s*(?:(?:please )?(?:use|activate|enable)
 
 type event struct {
 	Name    string `json:"hook_event_name"`
+	Tool    string `json:"tool_name"`
 	Session string `json:"session_id"`
 	Turn    string `json:"prompt_id"`
 	Source  string `json:"source"`
@@ -32,11 +33,12 @@ type event struct {
 	Cwd     string `json:"cwd"`
 }
 type receipt struct {
-	Opening     string `json:"opening,omitempty"`
-	Latest      string `json:"latest,omitempty"`
-	Private     bool   `json:"private,omitempty"`
-	OpeningHook string `json:"openingHook,omitempty"`
-	LatestHook  string `json:"latestHook,omitempty"`
+	Opening         string `json:"opening,omitempty"`
+	Latest          string `json:"latest,omitempty"`
+	Private         bool   `json:"private,omitempty"`
+	OpeningHook     string `json:"openingHook,omitempty"`
+	LatestHook      string `json:"latestHook,omitempty"`
+	OpeningReminder bool   `json:"openingReminder,omitempty"`
 }
 type enrollment struct {
 	API          string `json:"api"`
@@ -174,7 +176,7 @@ func run(args []string, input io.Reader, output io.Writer) error {
 		return nil
 	}
 	sid := "devin-" + strings.ReplaceAll(match[1], "-", "")
-	if mode == "hook" && e.Name != "UserPromptSubmit" && (e.Name != "SessionStart" || e.Source != "startup") {
+	if mode == "hook" && e.Name != "UserPromptSubmit" && e.Name != "PostToolUse" && (e.Name != "SessionStart" || e.Source != "startup") {
 		return nil
 	}
 	if e.Turn != "" && !nativeTurn.MatchString(e.Turn) {
@@ -227,6 +229,15 @@ func run(args []string, input io.Reader, output io.Writer) error {
 		if state.Opening != "" && state.Opening == state.Latest {
 			id = state.Opening
 		}
+	case e.Name == "PostToolUse":
+		// SessionStart may arrive after the model has begun its opening task.
+		// Re-deliver its existing turn reference once after a real tool completes.
+		if e.Tool == "" || e.Tool == "message_user" || e.Turn == "" || state.OpeningReminder ||
+			state.Opening != state.Latest || state.Opening != "devin-prompt:"+e.Turn {
+			return nil
+		}
+		id = state.Opening
+		state.OpeningReminder = true
 	case e.Name == "SessionStart":
 		if state.Latest != "" {
 			return nil
