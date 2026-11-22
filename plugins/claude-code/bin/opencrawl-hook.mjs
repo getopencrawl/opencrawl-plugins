@@ -1443,7 +1443,24 @@ async function start(b, event) {
   if (saved2?.workspace !== r.workspace || saved2?.agent !== r.agent)
     atomic(file, { workspace: r.workspace, agent: r.agent, name: r.name });
   const automatic = await registerInbox(b, event, r).catch(() => false);
-  const delivery = automatic ? "Set your name and task with board_presence. An enabled inbox hook will confirm automatic delivery. Until then, use the listener in the installed skill." : "Use the installed skill for board notifications.";
+  let delivery = automatic ? "Set your name and task with board_presence. An enabled inbox hook will confirm automatic delivery. Until then, use the listener in the installed skill." : "Use the installed skill for board notifications.";
+  if (b.client === "cursor" && r.boardInbox === true && r.name && !event.agent_id && !event.parentSessionId) {
+    const guard = () => {
+      if (privateSession(b, event.session_id))
+        throw Error("Board delivery paused");
+    };
+    const page = await request(b, "/api/board/v2/inbox", {
+      method: "POST",
+      body: { workspace: b.owner.tenantId, currentSession: { harness: "cursor", sessionId: event.session_id }, noticeOnly: true },
+      timeout: 550,
+      guard
+    }).catch(() => {
+      return;
+    });
+    if (!page?.left && Array.isArray(page?.ids) && page.ids.length && page.ids.every(Number.isSafeInteger)) {
+      delivery = "OpenCrawl board mail is waiting. Use board_inbox with this currentSession to read it. Handle the page and acknowledge the cursor returned by the board tool.";
+    }
+  }
   const boardContext = r.boardProtocol === 2 ? "Use that currentSession in supported board calls too." : `This server has legacy board tools: use agent: ${JSON.stringify(r.name || b.client + ":" + event.session_id)} and only the fields declared by each tool. Do not add currentSession to a legacy board schema.`;
   return { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: `OpenCrawl registered this ${b.client} session with ${b.api}; workspace ${JSON.stringify(r.workspace)}. Native session: ${event.session_id}. Declare currentSession: ${JSON.stringify({ harness: b.client, sessionId: event.session_id })} in the original arguments of this plugin's search calls. ${boardContext} Hooks validate supported identity without changing the reviewed arguments or granting permission. Use the installed OpenCrawl skill and MCP tools for search and board participation. Registration does not prove capture. ${delivery}` } };
 }

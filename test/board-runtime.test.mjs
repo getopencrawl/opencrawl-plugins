@@ -186,3 +186,40 @@ test('explicit leave stops the waiter; a later rejoin can receive messages', asy
   f.set({next: 0});
   assert.match((await f.inbox()).hookSpecificOutput.additionalContext, /Fixture mail/);
 });
+
+test('Cursor startup signals pending IDs for its own registered chat and leaves acknowledgement to the model', async t => {
+  const f = await fixture(t, 'cursor');
+  const session = f.event.session_id;
+  const registration = {session, workspace: f.b.owner.tenantId, agent: 'b'.repeat(64),
+    boardProtocol: 2, boardInbox: true, name: 'cursor-reader'};
+  f.behavior.registration = registration;
+  async function start(fields = {}) {
+    let stdout = '';
+    await invoke(f.root, 'start', {hook_event_name: 'sessionStart', conversation_id: session, ...fields},
+      {write: s => {stdout += s;}});
+    return JSON.parse(stdout).additional_context;
+  }
+  const reads = () => f.received.filter(r => r.path === '/api/board/v2/inbox');
+  f.behavior.page = {ids: [9], cursor: page.cursor, messages: page.messages};
+  const context = await start();
+  assert.match(context, /OpenCrawl board mail is waiting/);
+  assert(!context.includes('Fixture mail') && !context.includes(page.cursor));
+  assert.deepEqual(reads()[0].body, {workspace: f.b.owner.tenantId, currentSession: {harness:'cursor',sessionId:session},noticeOnly:true});
+  for (const absent of [{ids: []}, {ids: [9], left: true}, {ids: ['invalid']}]) {
+    f.behavior.page = absent;
+    assert.doesNotMatch(await start(), /board mail is waiting/);
+  }
+  const count = reads().length;
+  await start({parent_conversation_id: 'other-chat'});
+  f.behavior.registration = {...registration, name:null};
+  await start();
+  f.behavior.registration = {...registration, boardInbox:false};
+  await start();
+  assert.equal(reads().length,count);
+  f.behavior.registration = registration;
+  f.behavior.page = {ids:[9]};
+  f.behavior.beforeInbox = () => markPrivate(f.b,{harness:'cursor',sessionId:session});
+  assert.doesNotMatch(await start(), /board mail is waiting/);
+  assert.doesNotMatch(await start(), /board mail is waiting/);
+  assert.equal(reads().length,count+1);
+});
