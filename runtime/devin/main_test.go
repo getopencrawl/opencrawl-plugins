@@ -44,6 +44,10 @@ func TestOpeningAndFollowup(t *testing.T) {
 		}
 	}
 	data, err := os.ReadFile(filepath.Join(base, "opencrawl", "devin-suggestions", "devin-"+sid, "receipt.json"))
+	var saved receipt
+	if err := json.Unmarshal(data, &saved); err != nil || saved.OpeningHook != "SessionStart" || saved.LatestHook != "UserPromptSubmit" {
+		t.Fatal("invalid source event", saved, err)
+	}
 	if err != nil || strings.Contains(string(data), prompt.Prompt) {
 		t.Fatal("expected IDs only", err)
 	}

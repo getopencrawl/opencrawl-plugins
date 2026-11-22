@@ -32,9 +32,11 @@ type event struct {
 	Cwd     string `json:"cwd"`
 }
 type receipt struct {
-	Opening string `json:"opening,omitempty"`
-	Latest  string `json:"latest,omitempty"`
-	Private bool   `json:"private,omitempty"`
+	Opening     string `json:"opening,omitempty"`
+	Latest      string `json:"latest,omitempty"`
+	Private     bool   `json:"private,omitempty"`
+	OpeningHook string `json:"openingHook,omitempty"`
+	LatestHook  string `json:"latestHook,omitempty"`
 }
 type enrollment struct {
 	API          string `json:"api"`
@@ -234,6 +236,8 @@ func run(args []string, input io.Reader, output io.Writer) error {
 			id = "devin-prompt:" + e.Turn
 		}
 		state.Opening = id
+		state.OpeningHook = e.Name
+		state.LatestHook = e.Name
 		state.Latest = id
 	case e.Name == "UserPromptSubmit" && (e.Source == "" || e.Source == "user") && e.Turn != "" && strings.TrimSpace(e.Prompt) != "":
 		id = "devin-prompt:" + e.Turn
@@ -242,7 +246,9 @@ func run(args []string, input io.Reader, output io.Writer) error {
 		}
 		if state.Latest == "" {
 			state.Opening = id
+			state.OpeningHook = e.Name
 		}
+		state.LatestHook = e.Name
 		state.Latest = id
 	default:
 		return nil
