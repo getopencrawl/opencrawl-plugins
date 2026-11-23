@@ -72,9 +72,6 @@ func within(base, path string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
 }
 func allowed(profile, sid, cwd string) bool {
-	if v, ok := os.LookupEnv("OPENCRAWL_DEVIN_SUGGESTIONS"); ok && v != "on" {
-		return false
-	}
 	var config enrollment
 	exists, err := readJSON(filepath.Join(profile, "capture", "config.json"), &config)
 	if err != nil {
@@ -109,39 +106,6 @@ func allowed(profile, sid, cwd string) bool {
 			}
 		}
 	}
-	for _, key := range []string{digest(api), arrayHash(api, config.Installation, config.Owner.Tenant, config.Owner.User)} {
-		var p struct {
-			API          string `json:"api"`
-			Installation string `json:"installationId"`
-			Owner        struct {
-				Tenant string `json:"tenantId"`
-				User   string `json:"userId"`
-			} `json:"owner"`
-			Choices       map[string]bool
-			Harnesses     []string
-			SchemaVersion int
-		}
-		found, err := readJSON(filepath.Join(profile, "context-checks", key+".json"), &p)
-		if err != nil {
-			return false
-		}
-		if !found || p.API != api || p.Installation != config.Installation || p.Owner.Tenant != config.Owner.Tenant || p.Owner.User != config.Owner.User {
-			continue
-		}
-		if p.SchemaVersion != 1 {
-			return false
-		}
-		if p.Choices != nil {
-			on, chosen := p.Choices["devin"]
-			return !chosen || on
-		}
-		for _, h := range p.Harnesses {
-			if h == "devin" {
-				return true
-			}
-		}
-		return false
-	}
 	return true
 }
 
@@ -165,8 +129,14 @@ func run(args []string, input io.Reader, output io.Writer) error {
 			return nil
 		}
 	} else {
-		if len(args) != 2 || (args[0] != "opening" && args[0] != "off") {
-			return nil
+		if args[0] != "opening" || (len(args) != 2 && len(args) != 3) {
+			return errors.New("usage: opencrawl-context opening SESSION_ID [PRIVATE_COMMAND]")
+		}
+		if len(args) == 3 {
+			if !privacy.MatchString(args[2]) {
+				return errors.New("expected a private-session command")
+			}
+			e.Prompt = args[2]
 		}
 		mode = args[0]
 		e.Session = args[1]
@@ -221,7 +191,7 @@ func run(args []string, input io.Reader, output io.Writer) error {
 	before := state
 	var id string
 	switch {
-	case mode == "off" || privacy.MatchString(e.Prompt):
+	case privacy.MatchString(e.Prompt):
 		state.Private = true
 	case state.Private || !allowed(profile, sid, e.Cwd):
 		return nil
@@ -315,5 +285,8 @@ func main() {
 		}
 		return
 	}
-	_ = run(os.Args[1:], os.Stdin, os.Stdout)
+	if err := run(os.Args[1:], os.Stdin, os.Stdout); err != nil && len(os.Args) > 1 {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
 }

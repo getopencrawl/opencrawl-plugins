@@ -73,11 +73,6 @@ func TestPrivacy(t *testing.T) {
 	if invoke(t, private) != "" {
 		t.Fatal("privacy lost on next turn")
 	}
-	t.Setenv("OPENCRAWL_DEVIN_SUGGESTIONS", "off")
-	startup.Session = "00000000000000000000000000000000"
-	if invoke(t, startup) != "" {
-		t.Fatal("disabled startup produced a cue")
-	}
 }
 
 func TestMissingAndExcludedWork(t *testing.T) {
@@ -106,5 +101,39 @@ func TestMissingAndExcludedWork(t *testing.T) {
 	}
 	if invoke(t, event{Name: "SessionStart", Session: sid, Source: "startup"}) != "" {
 		t.Fatal("excluded session produced a cue")
+	}
+}
+
+func TestSearchShipsWithPlugin(t *testing.T) {
+	base := t.TempDir()
+	t.Setenv("OPENCRAWL_CONFIG_HOME", base)
+	t.Setenv("OPENCRAWL_DEVIN_SUGGESTIONS", "off")
+	profile := filepath.Join(base, "opencrawl")
+	for path, value := range map[string]string{
+		filepath.Join("capture", "config.json"):              `{"api":"https://app.getopencrawl.com","installationId":"install","owner":{"tenantId":"one","userId":"member"}}`,
+		filepath.Join("context-checks", digest(api)+".json"): `{"schemaVersion":1,"api":"https://app.getopencrawl.com","installationId":"install","owner":{"tenantId":"one","userId":"member"},"choices":{"devin":false}}`,
+	} {
+		path = filepath.Join(profile, path)
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(value), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := run([]string{"off", sid}, strings.NewReader(""), &bytes.Buffer{}); err == nil {
+		t.Fatal("retired off command succeeded")
+	}
+	start := event{Name: "SessionStart", Source: "startup", Session: sid, Turn: "first"}
+	next := event{Name: "UserPromptSubmit", Source: "user", Session: sid, Turn: "second", Prompt: "Explain the release decision"}
+	for _, e := range []event{start, next} {
+		if out := invoke(t, e); !strings.Contains(out, "devin-prompt:"+e.Turn) {
+			t.Fatalf("%s missing cue: %s", e.Name, out)
+		}
+	}
+	invoke(t, event{}, "opening", sid, "/oc-private")
+	next.Turn = "third"
+	if out := invoke(t, next); out != "" {
+		t.Fatal("private session produced a cue", out)
 	}
 }

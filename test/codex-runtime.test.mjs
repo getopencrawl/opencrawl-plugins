@@ -6,7 +6,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {fixture} from './fixture.mjs';
 import {atomic,binding} from '../runtime/io.mjs';
 import {collect,flush,handoffCodex} from '../runtime/capture.mjs';
-import {search} from '../runtime/lifecycle.mjs';
+import {search,start} from '../runtime/lifecycle.mjs';
 
 const row=payload=>({timestamp:new Date().toISOString(),type:'response_item',payload});
 const message=(id,role,text)=>row({type:'message',id,role,content:[{type:role==='user'?'input_text':'output_text',text}]});
@@ -96,4 +96,20 @@ test('Replicas Codex captures executed calls without uploading the startup tool 
   const batches=f.queued();
   assert(batches.every(batch=>batch.origin==='cloud'));
   assert.deepEqual(batches.flatMap(batch=>batch.events.map(event=>event.kind)),['tool_call','tool_result']);
+});
+
+test('native SessionStart describes Git handoffs only when the workspace offers shared files', async t => {
+  const f = await fixture(t, 'codex');
+  const event = {...f.event, hook_event_name: 'SessionStart'};
+  for (const sharedFiles of [true, false, undefined]) {
+    f.behavior.sharedFiles = sharedFiles;
+    const receipt = (await start(f.b, event)).hookSpecificOutput.additionalContext;
+    assert.match(receipt, /supported board calls/);
+    if (sharedFiles) {
+      assert.ok(receipt.includes(`opencrawl files open --session ${event.session_id} --api ${f.b.api}`));
+      assert.match(receipt, /push to origin main.*commit and path.*board thread/);
+    } else {
+      assert.doesNotMatch(receipt, /opencrawl files open|push to origin main/);
+    }
+  }
 });
