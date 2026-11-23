@@ -1,4 +1,4 @@
-import {lstatSync} from 'node:fs';
+import {lstatSync,realpathSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {binding,enrollment,recording,atomic,nativeId} from './io.mjs';
@@ -102,7 +102,17 @@ export async function invoke(root,action,event,output=process.stdout){
   }else throw Error('Unsupported lifecycle action');
   if(result||['antigravity','cursor'].includes(b.client)&&action==='search')output.write(JSON.stringify(format(result))+'\n');
 }
-if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]||process.versions.bun&&import.meta.main){
+function isEntryPoint() {
+  if (process.versions.bun && import.meta.main) return true;
+  const entry = process.argv[1];
+  if (!entry) return false;
+  const modulePath = fileURLToPath(import.meta.url);
+  if (entry === modulePath) return true;
+  // Node resolves the module URL, while hosts may launch it through a symlink.
+  try { return realpathSync(entry) === modulePath; } catch { return false; }
+}
+
+if(isEntryPoint()){
   const args=process.argv.slice(2);
   try{
     if(args.length!==4||args[0]!=='--root'||args[2]!=='--action')throw Error('Explicit root and action required');

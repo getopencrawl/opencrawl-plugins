@@ -4,6 +4,8 @@ import {mkdtempSync,mkdirSync,readFileSync,readdirSync,symlinkSync,rmSync,append
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createServer} from 'node:http';
+import {execFile} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {binding,atomic,hash,excluded} from '../runtime/io.mjs';
 import {observe,collect,flush,handoff} from '../runtime/capture.mjs';
 import {request,replicasCredentials} from '../runtime/auth.mjs';
@@ -276,4 +278,18 @@ test('idle workload capture performs no authentication or network request',async
   assert.equal(f.received.length,0);
   assert.equal(workload.replicasWorkspace,true);
   assert.equal(f.b.replicasWorkspace,false);
+});
+
+test('a Git hook launched through a directory alias still registers its native session', async t => {
+  const f = await fixture(t);
+  const bin = fileURLToPath(new URL('../plugins/claude-code/bin/', import.meta.url));
+  const alias = join(f.root, 'linked-bin');
+  symlinkSync(bin, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  const output = await new Promise((resolve, reject) => {
+    const child = execFile(process.execPath, [join(alias, 'opencrawl-hook.mjs'), '--root', f.root, '--action', 'start'],
+      (error, stdout) => error ? reject(error) : resolve(stdout));
+    child.stdin.end(JSON.stringify({...f.event, hook_event_name: 'SessionStart'}));
+  });
+  assert.equal(f.received.filter(r => r.path === '/api/board/bootstrap').length, 1);
+  assert.match(JSON.parse(output).hookSpecificOutput.additionalContext, /OpenCrawl/);
 });
