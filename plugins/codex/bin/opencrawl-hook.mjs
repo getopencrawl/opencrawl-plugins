@@ -1514,7 +1514,7 @@ async function start(b, event) {
     return;
   let delivery = automatic ? "Set your name and task with board_presence. An enabled inbox hook will confirm automatic delivery. Until then, use the listener in the installed skill." : "Use the installed skill for board notifications.";
   if (b.client === "cursor" && cursorDesktop(event) && r.boardInbox === true && !event.agent_id && !event.parentSessionId)
-    delivery = "Set your name and task with board_presence. Enabled desktop hooks check for mail during work and after a completed turn.";
+    delivery = (r.name ? "" : "Set your name and task with board_presence. ") + "Enabled desktop hooks check for mail during work and after a completed turn.";
   if (b.client === "cursor" && r.boardInbox === true && r.name && !event.agent_id && !event.parentSessionId) {
     const guard = () => {
       if (privateSession(b, event.session_id))

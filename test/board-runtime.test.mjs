@@ -209,6 +209,7 @@ test('Cursor startup signals pending IDs for its own registered chat and leaves 
     f.behavior.page = absent;
     assert.doesNotMatch(await start(), /board mail is waiting/);
   }
+  assert.doesNotMatch(await start({cursor_version:'3.18.9'}), /Set your name and task/);
   const count = reads().length;
   await start({parent_conversation_id: 'other-chat'});
   f.behavior.registration = {...registration, name:null};
