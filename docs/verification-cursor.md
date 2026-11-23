@@ -24,11 +24,12 @@ The supported minimum is the later version used for child and durability checks.
   hook-only markers: sessionStart context in its first assistant message, and
   postToolUse context in the next assistant reply after shell completion.
   Neither marker appeared in the user prompt or shell output. These diagnostic
-  hooks establish timing support, not a shipped post-tool suggestion feature.
+  hooks established the delivery point used by the 0.3.6 plugin.
   The beforeSubmitPrompt probe `43ef38ba-2b97-4a34-86f3-44181ca0fc14` returned
   NO_CONTEXT and triggered no suggestion request. Cursor's documented schema
-  for that event accepts no additional_context; per-prompt paid suggestions are
-  omitted from this package. See [Cursor hooks](https://cursor.com/docs/hooks).
+  for that event accepts no additional_context. The plugin waits for a tool
+  callback in that generation before requesting suggestions. See
+  [Cursor hooks](https://cursor.com/docs/hooks).
 - Existing daemon 0.4.103 retained five events for session
   `4ea54789-abe2-4578-b829-bd3736c1defb` through actual fixture HTTP503 responses.
   After native exit, endpoint recovery drained the queue and made all five

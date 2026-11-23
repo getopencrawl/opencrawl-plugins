@@ -9,6 +9,36 @@ import {invoke} from '../runtime/main.mjs';
 const row=(role,text)=>JSON.stringify({role,message:{content:[{type:'text',text}]}})+'\n';
 const hook=(f,name,extra={})=>({...f.event,hook_event_name:name,nativeHookName:name,conversation_id:f.event.session_id,...extra});
 const events=f=>f.queued().flatMap(b=>b.events);
+test('Cursor defers the prompt check to a tool callback in the same generation',async t=>{
+ const f=await fixture(t,'cursor');
+ const run=async(action,name,generation,extra={})=>{
+  let output='';
+  await invoke(f.root,action,hook(f,name,{generation_id:generation,...extra}),{write:(data,done)=>{output+=data;done?.();}});
+  return output?JSON.parse(output):{};
+ };
+ const checks=()=>f.received.filter(row=>row.path==='/api/context/suggestions');
+ await run('observe','beforeSubmitPrompt','first',{prompt:'First user prompt'});
+ await run('observe','beforeSubmitPrompt','second',{prompt:'Second user prompt'});
+ for(const [name,id,extra] of [
+  ['postToolUse','first',{}],['postToolUse',undefined,{}],['beforeSubmitPrompt','second',{}],
+  ['postToolUse','second',{parent_conversation_id:'parent'}],['postToolUseFailure','second',{is_interrupt:true}],
+ ])assert.deepEqual(await run('suggest',name,id,extra),{});
+ assert.equal(checks().length,0);
+ const results=await Promise.all(['postToolUseFailure','postToolUse'].map(name=>run('suggest',name,'second',{tool_output:'PRIVATE TOOL RESULT'})));
+ assert.equal(results.filter(result=>result.additional_context?.includes('A prior result')).length,1);
+ assert.equal(checks().length,1);
+ assert.equal(checks()[0].body.message,'Second user prompt');
+ assert(!JSON.stringify(checks()[0].body).includes('PRIVATE TOOL RESULT'));
+ await run('suggest','postToolUse','second');
+ assert.equal(checks().length,1);
+ await run('observe','beforeSubmitPrompt','third',{prompt:'A later prompt'});
+ atomic(join(f.b.capture,'config.json'),{...f.config,exclusions:{projects:[f.root]}});
+ await run('suggest','postToolUse','third',{cwd:dirname(f.root)});
+ assert.equal(checks().length,1);
+ atomic(join(f.b.capture,'config.json'),{...f.config,disabled:true});
+ await run('suggest','postToolUse','third');
+ assert.equal(checks().length,1);
+});
 test('Cursor reconciles omitted content callbacks and repeated identical replies with complete tool content',async t=>{
  const f=await fixture(t,'cursor'),file=f.event.transcript_path;
  writeFileSync(file,row('user','<timestamp>now</timestamp>\n<user_query>\nUSER\n</user_query>')+row('assistant','SAME'));

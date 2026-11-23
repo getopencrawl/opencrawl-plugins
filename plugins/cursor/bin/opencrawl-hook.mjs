@@ -1280,7 +1280,7 @@ async function flush(b) {
 }
 
 // runtime/lifecycle.mjs
-import { join as join5 } from "node:path";
+import { isAbsolute as isAbsolute3, join as join5 } from "node:path";
 import { readdirSync as readdirSync3, unlinkSync as unlinkSync4, existsSync as existsSync2 } from "node:fs";
 import { randomUUID as randomUUID3 } from "node:crypto";
 async function start(b, event) {
@@ -1348,21 +1348,42 @@ function settings(b) {
   if (!c.disabled && c.harnesses?.includes(b.client))
     return { c, s: { revision: "recording-default-v1" } };
 }
-async function notePrompt(b, event) {
-  if (event.hook_event_name !== "UserPromptSubmit")
-    return;
-  const selected2 = settings(b);
-  if (!selected2 || event.hook_event_name !== "UserPromptSubmit" || event.agent_id || !nativeId(event.session_id) || !nativeId(event.prompt_id) || typeof event.prompt !== "string" || !event.prompt.trim() || excluded(selected2.c, event.session_id, event.cwd))
-    return;
-  const revision = selected2.s.revision, session = hash(JSON.stringify([b.client, event.session_id]));
+function taskLocation(b, event, revision) {
+  const session = hash(JSON.stringify([b.client, event.session_id]));
   const eventKey = hash(JSON.stringify([b.client, event.session_id, event.prompt_id]));
   const key2 = hash(JSON.stringify([revision, eventKey])), dir = join5(b.profile, "plugin-state", b.key, "suggestions");
   const file = join5(dir, "tasks", key2 + ".json"), latest = join5(dir, "latest", session + ".json");
+  return { session, eventKey, key: key2, dir, file, latest };
+}
+function cursorProjects(event) {
+  if (!nativeId(event.conversation_id) || event.parent_conversation_id || event.subagent_id || event.agent_id)
+    return;
+  const roots = event.workspace_roots ?? [];
+  if (!Array.isArray(roots) || roots.length > 16)
+    return;
+  const projects = [...new Set([...roots, ...event.cwd ? [event.cwd] : []])].sort();
+  if (projects.some((p) => typeof p !== "string" || !isAbsolute3(p)) || Buffer.byteLength(JSON.stringify(projects)) > 2048)
+    return;
+  return projects;
+}
+function projectExcluded(config, session, projects) {
+  return (projects.length ? projects : [undefined]).some((path) => excluded(config, session, path));
+}
+async function notePrompt(b, event) {
+  if (event.hook_event_name !== "UserPromptSubmit")
+    return;
+  const selected2 = settings(b), cursor = b.client === "cursor";
+  const projects = cursor ? cursorProjects(event) : [event.cwd];
+  if (!selected2 || !projects || event.agent_id || !nativeId(event.session_id) || !nativeId(event.prompt_id) || typeof event.prompt !== "string" || !event.prompt.trim() || projectExcluded(selected2.c, event.session_id, projects))
+    return;
+  const revision = selected2.s.revision;
+  const { session, eventKey, key: key2, dir, file, latest } = taskLocation(b, event, revision);
   return locked(join5(dir, "admission.lock"), async () => {
     const existing = readJson(file, 32768, { missing: true });
     if (existing)
       return { ...existing, file, latest, dir };
-    const before = readJson(latest, 32768, { missing: true }), now = Date.now();
+    const previous = readJson(latest, 32768, { missing: true }), now = Date.now();
+    const before = !cursor || previous?.revision === revision && JSON.stringify(previous.projects) === JSON.stringify(projects) ? previous : undefined;
     const tasks = join5(dir, "tasks");
     let active = 0;
     const retained = [];
@@ -1382,14 +1403,29 @@ async function notePrompt(b, event) {
       unlinkSync4(old.path);
     const message = redact(event.prompt).slice(0, 4000);
     const context = [...before?.context ?? [], ...before?.message ? [{ role: "user", text: before.message.slice(0, 400) }] : []].slice(-4);
-    const task = { key: key2, eventKey, session, revision, created: now, status: active < 2 ? "observed" : "skipped", input: { eventId: event.prompt_id, currentSession: { harness: b.client, sessionId: event.session_id }, role: "user", message, task: before?.task ?? message.slice(0, 1000), context, timestamp: new Date(now).toISOString() } };
+    const scope = cursor ? { revision, projects } : {};
+    const task = { ...scope, key: key2, eventKey, session, revision, created: now, status: active < 2 ? "observed" : "skipped", input: { eventId: event.prompt_id, currentSession: { harness: b.client, sessionId: event.session_id }, role: "user", message, task: before?.task ?? message.slice(0, 1000), context, timestamp: new Date(now).toISOString() } };
     atomic(file, task);
-    atomic(latest, { key: key2, created: now, message, task: task.input.task, context });
+    atomic(latest, { ...scope, key: key2, created: now, message, task: task.input.task, context });
     return { ...task, file, latest, dir };
   }, 500);
 }
+function cursorToolTask(b, event) {
+  if (!["postToolUse", "postToolUseFailure"].includes(event.nativeHookName) || event.is_interrupt || !nativeId(event.prompt_id))
+    return;
+  const projects = cursorProjects(event), selected2 = settings(b);
+  if (!projects || !selected2 || projectExcluded(selected2.c, event.session_id, projects))
+    return;
+  const location = taskLocation(b, event, selected2.s.revision);
+  if (readJson(location.latest, 32768, { missing: true })?.key !== location.key)
+    return;
+  const task = readJson(location.file, 32768, { missing: true });
+  if (!task || !["observed", "skipped"].includes(task.status) || Date.now() - task.created >= 120000 || !Array.isArray(task.projects) || projectExcluded(selected2.c, event.session_id, task.projects))
+    return;
+  return { ...task, ...location };
+}
 async function suggest(b, event) {
-  const task = await notePrompt(b, event);
+  const task = b.client === "cursor" ? cursorToolTask(b, event) : await notePrompt(b, event);
   if (!task)
     return;
   const { file: state, dir, revision } = task, outbox = join5(dir, "events");
@@ -1412,9 +1448,10 @@ async function suggest(b, event) {
         report("skipped", { reason: "capacity" });
         return;
       }
+      const projects = b.client === "cursor" ? [...task.projects, ...cursorProjects(event)] : [event.cwd];
       const guard = () => {
         const now = settings(b);
-        if (privateSession(b, event.session_id) || !now || now.s.revision !== revision || excluded(now.c, event.session_id, event.cwd) || readJson(task.latest, 32768)?.key !== task.key || Date.now() - task.created >= 120000)
+        if (privateSession(b, event.session_id) || !now || now.s.revision !== revision || projectExcluded(now.c, event.session_id, projects) || readJson(task.latest, 32768)?.key !== task.key || Date.now() - task.created >= 120000)
           throw Error("Context selection changed");
       };
       guard();
@@ -1455,6 +1492,8 @@ async function suggest(b, event) {
       } };
     }, 500);
   } catch (error) {
+    if (phase === "lock")
+      return;
     report("dropped", { reason: "unavailable" });
     const prior = readJson(state, 32768, { missing: true });
     if (prior)

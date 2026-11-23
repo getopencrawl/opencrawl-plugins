@@ -33,6 +33,14 @@ test('packaged executable captures and uploads with CLI, Node and Bun absent fro
   const sent=f.received.filter(r=>r.path==='/api/sessions/batches').flatMap(r=>r.body.events);
   assert.equal(sent.length,2);assert.equal(f.queued().length,0);
   assert.equal(JSON.parse(readFileSync(join(f.b.profile,'plugin-state',f.b.key,'status.json'))).uploaded,harness==='claude-code'?2:1);
+  if(harness==='cursor'){
+    const ids={generation_id:'compiled-turn'};
+    const observed=await invoke('observe',f.event,{...ids,hook_event_name:'beforeSubmitPrompt',prompt:'Find earlier work'});
+    assert.deepEqual(JSON.parse(observed),{continue:true});
+    const reply=await invoke('suggest',f.event,{...ids,hook_event_name:'postToolUse'});
+    assert.match(JSON.parse(reply).additional_context,/A prior result/);
+    assert.equal(f.received.filter(r=>r.path==='/api/context/suggestions').length,1);
+  }
   const prompt='/oc-incognito';
   const event={...f.event,hook_event_name:'UserPromptSubmit',prompt,turn_id:'private-turn',prompt_id:'private-prompt'};
   if(harness==='antigravity')writeFileSync(f.event.transcript_path,JSON.stringify({step_index:9,type:'USER_INPUT',source:'USER_EXPLICIT',status:'DONE',content:prompt,created_at:new Date().toISOString()})+'\n');

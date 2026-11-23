@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "harness": "cursor",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "status": "ready",
   "cliRequired": false,
   "minimumHarnessVersion": "2026.11.17-f532c45",
@@ -23,7 +23,7 @@
     "toolOutputs": true
   },
   "daemonHandoff": true,
-  "contextSuggestions": false,
+  "contextSuggestions": true,
   "nativeVerifiedPlatforms": ["darwin-arm64"],
   "runtimeVerifiedPlatforms": ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "win32-x64"]
 }

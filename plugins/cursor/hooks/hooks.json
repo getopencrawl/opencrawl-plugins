@@ -21,6 +21,12 @@
         "type": "command",
         "timeout": 15,
         "failClosed": false
+      },
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action observe",
+        "type": "command",
+        "timeout": 2,
+        "failClosed": false
       }
     ],
     "afterAgentResponse": [
@@ -37,6 +43,12 @@
         "type": "command",
         "timeout": 15,
         "failClosed": false
+      },
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action suggest",
+        "type": "command",
+        "timeout": 32,
+        "failClosed": false
       }
     ],
     "postToolUseFailure": [
@@ -44,6 +56,12 @@
         "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action capture",
         "type": "command",
         "timeout": 15,
+        "failClosed": false
+      },
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action suggest",
+        "type": "command",
+        "timeout": 32,
         "failClosed": false
       }
     ],
