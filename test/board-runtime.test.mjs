@@ -505,3 +505,26 @@ test('a replaced launcher cannot dispatch an older outstanding response', async 
   } finally { release.resolve(); }
   assert.equal(await old, undefined);
 });
+
+test('Cursor Cloud accepts different native generations and checks only direct mail at stop', async t => {
+  const f = await fixture(t,'cursor'), id = f.event.session_id, calls = [];
+  f.behavior.registration = {session:id,workspace:f.b.owner.tenantId,name:'fixture',agent:'c'.repeat(64),boardInbox:true,boardDirect:true,boardProtocol:2};
+  let available = 0;
+  f.behavior.sync = args => {
+    calls.push(args);
+    const messages = args.delivery === 'direct' && available > (args.after ?? 0) ? [{id:available}] : [];
+    return {messages,next:Math.max(available,args.after ?? 0),notificationReceipt:'f'.repeat(64)};
+  };
+  async function cloud(name,generation,extra = {}) {
+    let raw = '';
+    await invoke(f.root,'cloud-inbox',{hook_event_name:name,conversation_id:id,generation_id:generation,cursor_version:'1.0.0',...extra},{write:part=>{raw+=part;}});
+    return JSON.parse(raw);
+  }
+  assert.deepEqual(await cloud('beforeSubmitPrompt','prompt-generation'),{continue:true});
+  available = 4;
+  assert.match((await cloud('postToolUse','different-tool-generation')).additional_context,/"delivery":"direct"/);
+  const stop = await cloud('stop','run-different-generation',{status:'completed',loop_count:0});
+  assert.match(stop.followup_message,/"through":4/);
+  assert.deepEqual(await cloud('stop','run-different-generation',{status:'completed',loop_count:1}),{});
+  assert(calls.every(args=>args.delivery==='direct'&&!args.waitMs));
+});

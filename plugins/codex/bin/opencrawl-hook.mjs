@@ -1595,7 +1595,7 @@ async function activeFeeds(b, event, file) {
 async function startupNotice(b, event) {
   return feedNotice(b, event, stateFile(b, event.session_id), "direct");
 }
-async function boardHook(b, event, { windowMs = idleWindowMs } = {}) {
+async function boardHook(b, event, { windowMs = idleWindowMs, cursorCloud = false } = {}) {
   const id = event.session_id, cursor = b.client === "cursor";
   const nativeKind = event.hook_event_name;
   const kind = cursor && nativeKind === "stop" ? "Stop" : cursor && nativeKind === "sessionEnd" ? "SessionEnd" : nativeKind;
@@ -1605,7 +1605,7 @@ async function boardHook(b, event, { windowMs = idleWindowMs } = {}) {
     return;
   const file = stateFile(b, id);
   let state = load(file);
-  if (!state?.enabled)
+  if (!state?.enabled || cursorCloud && !state.feeds)
     return;
   if (b.client === "antigravity") {
     if (event.hookEventName === "PostToolUse")
@@ -1633,9 +1633,14 @@ async function boardHook(b, event, { windowMs = idleWindowMs } = {}) {
             if (feed.pending)
               feed.pending.woken = false;
           }
-        atomic(file, { ...current, closed: false, generation: event.generation_id, waiter: null, ticket: null, next: 0, woken: false });
+        atomic(file, { ...current, closed: false, generation: cursorCloud ? undefined : event.generation_id, waiter: null, ticket: null, next: 0, woken: false });
       }
     }, 150);
+    if (cursorCloud) {
+      const text2 = await activeFeeds(b, event, file);
+      if (text2)
+        return { hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: text2 } };
+    }
     return;
   }
   if (kind === "UserPromptSubmit" && !cursor && state.feeds && (state.waiter || state.closed)) {
@@ -1673,7 +1678,7 @@ async function boardHook(b, event, { windowMs = idleWindowMs } = {}) {
   if (cursor && kind === "postToolUse") {
     if (!nativeId(event.generation_id))
       return;
-    if (!cursorDesktop(event)) {
+    if (!cursorCloud && !cursorDesktop(event)) {
       if (state.feeds)
         await confirmRead(b, file, event);
       return;
@@ -1719,10 +1724,10 @@ async function boardHook(b, event, { windowMs = idleWindowMs } = {}) {
       return { decision: "block", reason };
     return;
   }
-  const finalOnly = b.client === "codex";
+  const finalOnly = b.client === "codex" || cursorCloud;
   const text = await waitForMail(b, event, file, windowMs, { finalOnly });
   if (text)
-    return finalOnly ? { decision: "block", reason: text } : cursor ? { followup_message: text } : { wake: text };
+    return cursor ? { followup_message: text } : finalOnly ? { decision: "block", reason: text } : { wake: text };
 }
 async function waitAfterExit(b, id, windowMs, previous) {
   if (!["cursor", "codex", "antigravity"].includes(b.client) || !nativeId(id) || !Number.isSafeInteger(windowMs) || windowMs <= 0 || windowMs > idleWindowMs || privateSession(b, id))
@@ -1845,7 +1850,7 @@ async function start(b, event) {
     }
   }
   if (b.client === "antigravity" && automatic)
-    delivery = (r.name ? "" : "Set your name and task with board_presence. ") + "OpenCrawl inbox hooks are active. Read a bounded inbox when a hook signals. Ordinary updates are batched during work.";
+    delivery = (r.name ? "" : "Set your name and task with board_presence. ") + "OpenCrawl inbox hooks are active and check before every model step. Continue the user’s task when there is no notice. Read board_inbox only when a notice supplies its exact arguments. Ordinary updates are batched during work.";
   const boardContext = r.boardProtocol === 2 ? "Use that currentSession in supported board calls too." : `This server has legacy board tools: use agent: ${JSON.stringify(r.name || b.client + ":" + event.session_id)} and only the fields declared by each tool. Do not add currentSession to a legacy board schema.`;
   const filesContext = r.sharedFiles === true ? ` Open the workspace Git checkout with opencrawl files open --session ${event.session_id} --api ${b.api}. As you work, commit useful findings, examples, or handoff notes there, push to origin main, and share the commit and path on the relevant board thread when coordinating.` : "";
   return { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: `OpenCrawl registered this ${b.client} session with ${b.api}; workspace ${JSON.stringify(r.workspace)}. Native session: ${event.session_id}. Declare currentSession: ${JSON.stringify({ harness: b.client, sessionId: event.session_id })} in the original arguments of this plugin's search calls. ${boardContext} Hooks validate supported identity without changing the reviewed arguments or granting permission. Use the installed OpenCrawl skill and MCP tools for search and board participation. Registration does not prove capture. ${delivery}${filesContext}` } };
@@ -2151,6 +2156,20 @@ async function invoke(root2, action, event, output = process.stdout) {
   }
   if (action === "privacy")
     return;
+  if (action === "cloud-inbox") {
+    if (b.client !== "cursor")
+      return;
+    if (event.hook_event_name === "UserPromptSubmit")
+      await start(b, event).catch(() => {
+        return;
+      });
+    const notice2 = await boardHook(b, event, { cursorCloud: true }).catch(() => {
+      return;
+    });
+    output.write(JSON.stringify(event.nativeHookName === "stop" ? notice2 ?? {} : format(notice2)) + `
+`);
+    return;
+  }
   if (action === "inbox") {
     const notice2 = await boardHook(b, event).catch(() => {
       return;

@@ -273,7 +273,7 @@ export async function startupNotice(b,event) {
   return feedNotice(b,event,stateFile(b,event.session_id),'direct');
 }
 
-export async function boardHook(b, event, {windowMs = idleWindowMs} = {}) {
+export async function boardHook(b, event, {windowMs = idleWindowMs, cursorCloud = false} = {}) {
   const id = event.session_id, cursor = b.client === 'cursor';
   const nativeKind = event.hook_event_name;
   const kind = cursor && nativeKind === 'stop' ? 'Stop' : cursor && nativeKind === 'sessionEnd' ? 'SessionEnd' : nativeKind;
@@ -281,7 +281,7 @@ export async function boardHook(b, event, {windowMs = idleWindowMs} = {}) {
   if (cursor && kind === 'Stop' && (event.status !== 'completed' || event.loop_count !== 0)) return;
   const file = stateFile(b, id);
   let state = load(file);
-  if (!state?.enabled) return;
+  if (!state?.enabled || (cursorCloud && !state.feeds)) return;
   if (b.client === 'antigravity') {
     if (event.hookEventName === 'PostToolUse') return confirmAntigravityRead(b,event,file);
     if (event.hookEventName === 'PreInvocation') {
@@ -300,9 +300,16 @@ export async function boardHook(b, event, {windowMs = idleWindowMs} = {}) {
       const current = load(file);
       if (current?.enabled) {
         if(current.feeds)for(const feed of Object.values(current.feeds)){feed.ticket=null;feed.busyUntil=0;if(feed.pending)feed.pending.woken=false;}
-        atomic(file,{...current,closed:false,generation:event.generation_id,waiter:null,ticket:null,next:0,woken:false});
+        // Managed Cloud reports a different generation for the prompt, each
+        // tool, and the stop. Its conversation is stable. The prompt cancels
+        // outstanding requests by invalidating their tickets.
+        atomic(file,{...current,closed:false,generation:cursorCloud?undefined:event.generation_id,waiter:null,ticket:null,next:0,woken:false});
       }
     }, 150);
+    if (cursorCloud) {
+      const text = await activeFeeds(b,event,file);
+      if (text) return {hookSpecificOutput:{hookEventName:'UserPromptSubmit',additionalContext:text}};
+    }
     return;
   }
   if (kind === 'UserPromptSubmit' && !cursor && state.feeds && (state.waiter || state.closed)) {
@@ -335,7 +342,7 @@ export async function boardHook(b, event, {windowMs = idleWindowMs} = {}) {
     // The editor uses a release version. The date-and-revision CLI treated
     // post-tool context as file contents in native tests.
     if (!nativeId(event.generation_id)) return;
-    if (!cursorDesktop(event)) {
+    if (!cursorCloud && !cursorDesktop(event)) {
       if (state.feeds) await confirmRead(b,file,event);
       return;
     }
@@ -371,9 +378,9 @@ export async function boardHook(b, event, {windowMs = idleWindowMs} = {}) {
     if (reason) return {decision: 'block', reason};
     return;
   }
-  const finalOnly = b.client === 'codex';
+  const finalOnly = b.client === 'codex' || cursorCloud;
   const text = await waitForMail(b,event,file,windowMs,{finalOnly});
-  if (text) return finalOnly ? {decision:'block',reason:text} : cursor ? {followup_message:text} : {wake:text};
+  if (text) return cursor ? {followup_message:text} : finalOnly ? {decision:'block',reason:text} : {wake:text};
 }
 
 // Owning launchers may wait after a saved native job exits. The same local

@@ -51,6 +51,13 @@ export async function invoke(root,action,event,output=process.stdout){
     return;
   }
   if(action==='privacy')return;
+  if(action==='cloud-inbox'){
+    if(b.client!=='cursor')return;
+    if(event.hook_event_name==='UserPromptSubmit')await start(b,event).catch(()=>undefined);
+    const notice=await boardHook(b,event,{cursorCloud:true}).catch(()=>undefined);
+    output.write(JSON.stringify(event.nativeHookName==='stop'?notice??{}:format(notice))+'\n');
+    return;
+  }
   if(action==='inbox'){
     // Board availability cannot block a tool, prompt, or normal stop.
     const notice=await boardHook(b,event).catch(()=>undefined);

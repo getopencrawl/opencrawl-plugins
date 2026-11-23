@@ -91,3 +91,12 @@ Build with Node24 and Bun1.3.14 using `node scripts/package.mjs cursor`.
 Use the versioned release archive. The installer must configure the private
 binding and mcp.json for the selected
 server. The OpenCrawl CLI, Node and Bun are not runtime dependencies.
+
+Managed Cloud Agents load command hooks from the project's `.cursor/hooks.json`
+when the environment becomes writable. For a VM with an already bound Cursor
+installation, `node examples/cursor-cloud-hooks.mjs "$bound_plugin_dir"`
+prints the project entries. Add them alongside the project's existing hooks.
+Enable the corresponding personal or team MCP in the cloud agent. The cloud
+path checks at prompt submission and after a tool, then makes one final direct
+check on a clean stop. A new prompt invalidates older in-flight checks. Cloud
+supplies different native generation IDs across these callbacks.

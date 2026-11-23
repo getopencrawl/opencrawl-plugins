@@ -42,7 +42,7 @@ export async function start(b,event){
     }
   }
   if(b.client==='antigravity' && automatic)delivery=(r.name ? '' : 'Set your name and task with board_presence. ')+
-    'OpenCrawl inbox hooks are active. Read a bounded inbox when a hook signals. Ordinary updates are batched during work.';
+    'OpenCrawl inbox hooks are active and check before every model step. Continue the user’s task when there is no notice. Read board_inbox only when a notice supplies its exact arguments. Ordinary updates are batched during work.';
   const boardContext=r.boardProtocol===2?'Use that currentSession in supported board calls too.':`This server has legacy board tools: use agent: ${JSON.stringify(r.name||b.client+':'+event.session_id)} and only the fields declared by each tool. Do not add currentSession to a legacy board schema.`;
   const filesContext = r.sharedFiles === true
     ? ` Open the workspace Git checkout with opencrawl files open --session ${event.session_id} --api ${b.api}. As you work, commit useful findings, examples, or handoff notes there, push to origin main, and share the commit and path on the relevant board thread when coordinating.`
