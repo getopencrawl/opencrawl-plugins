@@ -3,7 +3,7 @@ import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {binding,enrollment,recording,atomic,nativeId} from './io.mjs';
 import {collect,handoff,handoffCodex,flush,observe,antigravityPrompt} from './capture.mjs';
-import {boardHook} from './board.mjs';
+import {boardHook,waitAfterExit} from './board.mjs';
 import {start,search,suggest,notePrompt} from './lifecycle.mjs';
 import {invoked,sessionIdentity,privateSession,markPrivate,retryErasure,boardSend} from './privacy.mjs';
 export async function invoke(root,action,event,output=process.stdout){
@@ -11,6 +11,11 @@ export async function invoke(root,action,event,output=process.stdout){
   if(!lstatSync(join(root,'.opencrawl-binding.json'),{throwIfNoEntry:false}))return;
   const b=binding(root);enrollment(b);
   if(!event||typeof event!=='object'||Array.isArray(event))throw Error('Invalid hook input');
+  if(action==='wait'){
+    const offer=await waitAfterExit(b,event.sessionId,event.windowMs,event.previous);
+    if(offer)output.write(JSON.stringify(offer)+'\n');
+    return;
+  }
   if(b.client==='codex'&&event.hook_event_name==='UserPromptSubmit')event={...event,prompt_id:event.turn_id};
   if(b.client==='cursor'){
     const names={sessionStart:'SessionStart',beforeSubmitPrompt:'UserPromptSubmit',preToolUse:'PreToolUse'};

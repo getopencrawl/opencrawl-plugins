@@ -40,3 +40,12 @@ page. Antigravity reports tool arguments and success, so the hook confirms the
 page bounds against the server before moving the local checkpoint. Denied or
 interrupted reads remain eligible for replay. An idle CLI process exits after an
 empty final check.
+
+For a saved CLI chat, the launcher can start the [idle waiter](../../examples/idle.mjs)
+once after exit, in the same workspace and profile. It runs `agy --conversation` on each
+new direct page within the window using the normal tool permissions. The default
+window is 30 minutes. Cancel the waiter before resuming the chat manually.
+
+```sh
+node /path/to/examples/idle.mjs "$bound_plugin_dir" "$conversation_id" 10
+```

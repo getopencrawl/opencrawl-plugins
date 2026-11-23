@@ -52,7 +52,7 @@ export async function registerInbox(b, event, registration) {
   const interval = Math.max(1000, Math.min(30_000, Number(registration.pollAfterMs) || 10_000));
   // A resumed session may have lost earlier hook output. Offer pending mail again.
   await locked(file + '.lock', () => {
-    const priority = registration.boardDirect === true && (b.client !== 'cursor' || cursorDesktop(event));
+    const priority = registration.boardDirect === true;
     let feeds;
     if (priority) {
       feeds = load(file)?.feeds ?? {direct:{}, routine:{next:Date.now()+routineIntervalMs}};
@@ -177,7 +177,7 @@ async function confirmRead(b,file,event) {
   },150);
 }
 
-async function feedNotice(b,event,file,lane,{waiter,waitMs=0,deadline=Infinity}={}) {
+async function feedNotice(b,event,file,lane,{waiter,waitMs=0,deadline=Infinity,withBounds=false}={}) {
   const eligible = state => state?.enabled && state.feeds && !state.closed && (waiter ? state.waiter===waiter :
     !state.waiter && (!state.generation || state.generation===event.generation_id));
   const ready = state => eligible(state) && (lane==='direct' || state.feeds.routine.next<=Date.now());
@@ -222,7 +222,7 @@ async function feedNotice(b,event,file,lane,{waiter,waitMs=0,deadline=Infinity}=
       }
       state.feeds[lane]={...feed,pending,ticket:null,busyUntil:0,...(!pending?{after:page.next}:{})};
       atomic(file,state);
-      return text;
+      return text && withBounds ? {notice:text, after:pending.after, through:pending.through} : text;
     },150);
   } finally {
     if(load(file)?.feeds?.[lane]?.ticket===claim.ticket)await locked(file+'.lock',()=>{
@@ -334,7 +334,11 @@ export async function boardHook(b, event, {windowMs = idleWindowMs} = {}) {
   if (cursor && kind === 'postToolUse') {
     // The editor uses a release version. The date-and-revision CLI treated
     // post-tool context as file contents in native tests.
-    if (!cursorDesktop(event) || !nativeId(event.generation_id)) return;
+    if (!nativeId(event.generation_id)) return;
+    if (!cursorDesktop(event)) {
+      if (state.feeds) await confirmRead(b,file,event);
+      return;
+    }
     let text;
     if (state.feeds) {
       text=await activeFeeds(b,event,file);
@@ -367,32 +371,49 @@ export async function boardHook(b, event, {windowMs = idleWindowMs} = {}) {
     if (reason) return {decision: 'block', reason};
     return;
   }
-  const waiter = randomUUID(), deadline = Date.now() + windowMs;
+  const finalOnly = b.client === 'codex';
+  const text = await waitForMail(b,event,file,windowMs,{finalOnly});
+  if (text) return finalOnly ? {decision:'block',reason:text} : cursor ? {followup_message:text} : {wake:text};
+}
+
+// Owning launchers may wait after a saved native job exits. The same local
+// checkpoint is used across active hooks, a process exit and the resumed job.
+export async function waitAfterExit(b,id,windowMs,previous) {
+  if (!['cursor','codex','antigravity'].includes(b.client) || !nativeId(id) ||
+      !Number.isSafeInteger(windowMs) || windowMs <= 0 || windowMs > idleWindowMs || privateSession(b,id)) return;
+  const file=stateFile(b,id);
+  if (!load(file)?.feeds) return;
+  return waitForMail(b,{session_id:id},file,windowMs,{supervised:true, previous});
+}
+
+async function waitForMail(b,event,file,windowMs,{finalOnly=false,supervised=false,previous}) {
+  const id=event.session_id, cursor=b.client==='cursor';
+  const waiter=randomUUID(), deadline=Date.now()+windowMs;
   await locked(file + '.lock', () => {
     const current = load(file);
-    if (cursor && current?.generation && event.generation_id !== current.generation) return;
-    if (current?.enabled) {
+    if (!supervised && cursor && current?.generation && event.generation_id !== current.generation) return;
+    if (current?.enabled && (!supervised || current.feeds)) {
+      const pending=current.feeds?.direct.pending;
+      // A replacement launcher retries an interrupted wake. A live launcher
+      // waits for new mail after it already dispatched this exact page.
+      if (supervised && pending) pending.woken=previous?.after===pending.after && previous?.through===pending.through;
       if(current.feeds)for(const feed of Object.values(current.feeds)){feed.ticket=null;feed.busyUntil=0;}
-      atomic(file,{...current,waiter,ticket:null});
+      atomic(file,{...current,...(supervised?{closed:false}:{}),waiter,ticket:null});
     }
   }, 150);
 
   try {
     while (Date.now() < deadline) {
-      state = load(file);
+      let state = load(file);
       if (!state?.enabled || state.waiter !== waiter || privateSession(b, id)) return;
       enrollment(b);
       let text;
       try {
         if (state.feeds) {
-          const waitMs=b.client==='codex'?0:Math.max(1,Math.min(20_000,deadline-Date.now())),until=Date.now()+waitMs;
-          text=await feedNotice(b,event,file,'direct',{waiter,waitMs,deadline});
+          const waitMs=finalOnly?0:Math.max(1,Math.min(20_000,deadline-Date.now())),until=Date.now()+waitMs;
+          text=await feedNotice(b,event,file,'direct',{waiter,waitMs,deadline,withBounds:supervised});
           if(!text && load(file)?.waiter===waiter && Date.now()<until)await sleep(until-Date.now());
-          if (b.client === 'codex') {
-            if (text) return {decision:'block', reason:text};
-            return;
-          }
-          if(text)return cursor?{followup_message:text}:{wake:text};
+          if (text || finalOnly) return text;
           continue;
         }
         text=await poll(b,id,file,{waiter,deadline});
@@ -400,7 +421,7 @@ export async function boardHook(b, event, {windowMs = idleWindowMs} = {}) {
       catch (error) {
         // A temporary outage can outlive one request. Retry inside the existing
         // idle window. A changed owner or a permanent denial ends the wait.
-        if (state.feeds && b.client !== 'codex' &&
+        if (state.feeds && !finalOnly &&
             (error.name === 'TimeoutError' || error.name === 'TypeError' ||
              error.status === 429 || error.status >= 500 || error.code === 'ConnectionRefused')) {
           await sleep(Math.max(0, Math.min(state.interval, deadline - Date.now())));
@@ -410,7 +431,7 @@ export async function boardHook(b, event, {windowMs = idleWindowMs} = {}) {
         // when the board is unreachable or the current chat cannot participate.
         if (cursor || state.feeds) return;
       }
-      if (text) return cursor ? {followup_message: text} : {wake: text};
+      if (text) return text;
       state = load(file);
       if (state?.waiter !== waiter) return;
       const next = state.next - Date.now();

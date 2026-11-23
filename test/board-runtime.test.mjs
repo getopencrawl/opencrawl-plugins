@@ -4,7 +4,7 @@ import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {fixture} from './fixture.mjs';
 import {invoke} from '../runtime/main.mjs';
-import {boardHook} from '../runtime/board.mjs';
+import {boardHook,waitAfterExit} from '../runtime/board.mjs';
 import {atomic,hash,readJson} from '../runtime/io.mjs';
 import {markPrivate} from '../runtime/privacy.mjs';
 
@@ -456,4 +456,52 @@ test('registration-backed transports must match their bound owner, installation,
  const servers={work:valid,foreign:{...valid,args:[...args.slice(0,-1),'agent_reg_other']},moved:{...valid,env:{OPENCRAWL_CONFIG_HOME:'/somewhere-else'}},relative:{...valid,command:'node'}};
  atomic(join(f.root,'.mcp.json'),{mcpServers:servers});
  assert.deepEqual(boardServers(b),['work']);assert.deepEqual(boardServers(f.b),[]);
+});
+
+test('a saved job waits only for direct mail and retries an interrupted dispatch on launcher restart', async t => {
+  const f = await session(t, 'codex'), id = f.event.session_id;
+  const wait = (ms, previous) => waitAfterExit(f.b, id, ms, previous);
+  assert.equal(await wait(100), undefined);
+  f.behavior.registration.boardDirect = true;
+  await f.start();
+  const seen = [];
+  f.behavior.sync = args => {
+    seen.push(args);
+    const messages = (args.after ?? 0) < 7 ? [{id:7}] : [];
+    return {messages, next:7, notificationReceipt:'a'.repeat(64)};
+  };
+  for (const ms of [-1, 0, 30 * 60_000 + 1]) assert.equal(await wait(ms), undefined);
+  const offer = await wait(1500);
+  assert.equal(offer.after, 6);
+  assert.equal(offer.through, 7);
+  assert.match(offer.notice, /board_inbox/);
+  assert.equal(await wait(65, offer), undefined);
+  assert.equal(readJson(f.file).waiter, null);
+  assert.deepEqual(await wait(1500), offer);
+  assert(seen.every(args => args.delivery === 'direct'));
+  markPrivate(f.b,{harness:'codex',sessionId:id});
+  const before = seen.length;
+  assert.equal(await wait(1500), undefined);
+  assert.equal(seen.length, before);
+});
+
+test('a replaced launcher cannot dispatch an older outstanding response', async t => {
+  const f = await session(t,'codex'), id = f.event.session_id;
+  f.behavior.registration.boardDirect = true;
+  await f.start();
+  const started = Promise.withResolvers(), release = Promise.withResolvers();
+  let requests = 0;
+  f.behavior.sync = async () => {
+    if (++requests === 1) {
+      started.resolve();
+      await release.promise;
+    }
+    return {messages:[{id:1}],next:1,notificationReceipt:'d'.repeat(64)};
+  };
+  const old = waitAfterExit(f.b,id,1500);
+  await started.promise;
+  try {
+    assert.equal((await waitAfterExit(f.b,id,1500)).through, 1);
+  } finally { release.resolve(); }
+  assert.equal(await old, undefined);
 });

@@ -1324,7 +1324,7 @@ async function registerInbox(b, event, registration) {
   const enabled = registration.boardInbox === true && (b.client !== "antigravity" || registration.boardDirect === true && registration.boardReadReceipt === true);
   const interval = Math.max(1000, Math.min(30000, Number(registration.pollAfterMs) || 1e4));
   await locked(file + ".lock", () => {
-    const priority = registration.boardDirect === true && (b.client !== "cursor" || cursorDesktop(event));
+    const priority = registration.boardDirect === true;
     let feeds;
     if (priority) {
       feeds = load(file)?.feeds ?? { direct: {}, routine: { next: Date.now() + routineIntervalMs } };
@@ -1454,7 +1454,7 @@ async function confirmRead(b, file, event) {
     atomic(file, state);
   }, 150);
 }
-async function feedNotice(b, event, file, lane, { waiter, waitMs = 0, deadline = Infinity } = {}) {
+async function feedNotice(b, event, file, lane, { waiter, waitMs = 0, deadline = Infinity, withBounds = false } = {}) {
   const eligible = (state) => state?.enabled && state.feeds && !state.closed && (waiter ? state.waiter === waiter : !state.waiter && (!state.generation || state.generation === event.generation_id));
   const ready = (state) => eligible(state) && (lane === "direct" || state.feeds.routine.next <= Date.now());
   if (!ready(load(file)))
@@ -1532,7 +1532,7 @@ async function feedNotice(b, event, file, lane, { waiter, waitMs = 0, deadline =
       }
       state.feeds[lane] = { ...feed, pending, ticket: null, busyUntil: 0, ...!pending ? { after: page.next } : {} };
       atomic(file, state);
-      return text;
+      return text && withBounds ? { notice: text, after: pending.after, through: pending.through } : text;
     }, 150);
   } finally {
     if (load(file)?.feeds?.[lane]?.ticket === claim.ticket)
@@ -1611,14 +1611,14 @@ async function boardHook(b, event, { windowMs = idleWindowMs } = {}) {
     if (event.hookEventName === "PostToolUse")
       return confirmAntigravityRead(b, event, file);
     if (event.hookEventName === "PreInvocation") {
-      const text = await activeFeeds(b, event, file);
-      if (text)
-        return { injectSteps: [{ ephemeralMessage: text }] };
+      const text2 = await activeFeeds(b, event, file);
+      if (text2)
+        return { injectSteps: [{ ephemeralMessage: text2 }] };
     }
     if (kind === "Stop" && event.fullyIdle === true && event.continuationActive === false && event.error === "" && event.terminationReason === "NO_TOOL_CALL") {
-      const text = await feedNotice(b, event, file, "direct");
-      if (text)
-        return { decision: "continue", reason: text };
+      const text2 = await feedNotice(b, event, file, "direct");
+      if (text2)
+        return { decision: "continue", reason: text2 };
     }
     return;
   }
@@ -1671,15 +1671,20 @@ async function boardHook(b, event, { windowMs = idleWindowMs } = {}) {
       return;
   }
   if (cursor && kind === "postToolUse") {
-    if (!cursorDesktop(event) || !nativeId(event.generation_id))
+    if (!nativeId(event.generation_id))
       return;
-    let text;
+    if (!cursorDesktop(event)) {
+      if (state.feeds)
+        await confirmRead(b, file, event);
+      return;
+    }
+    let text2;
     if (state.feeds) {
-      text = await activeFeeds(b, event, file);
+      text2 = await activeFeeds(b, event, file);
     } else
-      text = await poll(b, id, file, { generation: event.generation_id });
-    if (text)
-      return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: text } };
+      text2 = await poll(b, id, file, { generation: event.generation_id });
+    if (text2)
+      return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: text2 } };
     return;
   }
   if (cursor && kind !== "Stop")
@@ -1694,13 +1699,13 @@ async function boardHook(b, event, { windowMs = idleWindowMs } = {}) {
         atomic(file, { ...current, confirmed: true });
         return current.feeds ? "OpenCrawl inbox hooks are active. Mentions and followed replies take priority. Other updates arrive in a batch during work." : "OpenCrawl board delivery is automatic at active hooks. Acknowledge handled pages with board_inbox.";
       }, 150);
-    const text = await (state.feeds ? activeFeeds(b, event, file) : poll(b, id, file)).catch(() => {
+    const text2 = await (state.feeds ? activeFeeds(b, event, file) : poll(b, id, file)).catch(() => {
       return;
     });
     if (privateSession(b, id))
       return;
     enrollment(b);
-    const context = [confirmed, text].filter(Boolean).join(`
+    const context = [confirmed, text2].filter(Boolean).join(`
 `);
     if (context)
       return { hookSpecificOutput: { hookEventName: kind, additionalContext: context } };
@@ -1714,45 +1719,58 @@ async function boardHook(b, event, { windowMs = idleWindowMs } = {}) {
       return { decision: "block", reason };
     return;
   }
+  const finalOnly = b.client === "codex";
+  const text = await waitForMail(b, event, file, windowMs, { finalOnly });
+  if (text)
+    return finalOnly ? { decision: "block", reason: text } : cursor ? { followup_message: text } : { wake: text };
+}
+async function waitAfterExit(b, id, windowMs, previous) {
+  if (!["cursor", "codex", "antigravity"].includes(b.client) || !nativeId(id) || !Number.isSafeInteger(windowMs) || windowMs <= 0 || windowMs > idleWindowMs || privateSession(b, id))
+    return;
+  const file = stateFile(b, id);
+  if (!load(file)?.feeds)
+    return;
+  return waitForMail(b, { session_id: id }, file, windowMs, { supervised: true, previous });
+}
+async function waitForMail(b, event, file, windowMs, { finalOnly = false, supervised = false, previous }) {
+  const id = event.session_id, cursor = b.client === "cursor";
   const waiter = randomUUID3(), deadline = Date.now() + windowMs;
   await locked(file + ".lock", () => {
     const current = load(file);
-    if (cursor && current?.generation && event.generation_id !== current.generation)
+    if (!supervised && cursor && current?.generation && event.generation_id !== current.generation)
       return;
-    if (current?.enabled) {
+    if (current?.enabled && (!supervised || current.feeds)) {
+      const pending = current.feeds?.direct.pending;
+      if (supervised && pending)
+        pending.woken = previous?.after === pending.after && previous?.through === pending.through;
       if (current.feeds)
         for (const feed of Object.values(current.feeds)) {
           feed.ticket = null;
           feed.busyUntil = 0;
         }
-      atomic(file, { ...current, waiter, ticket: null });
+      atomic(file, { ...current, ...supervised ? { closed: false } : {}, waiter, ticket: null });
     }
   }, 150);
   try {
     while (Date.now() < deadline) {
-      state = load(file);
+      let state = load(file);
       if (!state?.enabled || state.waiter !== waiter || privateSession(b, id))
         return;
       enrollment(b);
       let text;
       try {
         if (state.feeds) {
-          const waitMs = b.client === "codex" ? 0 : Math.max(1, Math.min(20000, deadline - Date.now())), until = Date.now() + waitMs;
-          text = await feedNotice(b, event, file, "direct", { waiter, waitMs, deadline });
+          const waitMs = finalOnly ? 0 : Math.max(1, Math.min(20000, deadline - Date.now())), until = Date.now() + waitMs;
+          text = await feedNotice(b, event, file, "direct", { waiter, waitMs, deadline, withBounds: supervised });
           if (!text && load(file)?.waiter === waiter && Date.now() < until)
             await sleep(until - Date.now());
-          if (b.client === "codex") {
-            if (text)
-              return { decision: "block", reason: text };
-            return;
-          }
-          if (text)
-            return cursor ? { followup_message: text } : { wake: text };
+          if (text || finalOnly)
+            return text;
           continue;
         }
         text = await poll(b, id, file, { waiter, deadline });
       } catch (error) {
-        if (state.feeds && b.client !== "codex" && (error.name === "TimeoutError" || error.name === "TypeError" || error.status === 429 || error.status >= 500 || error.code === "ConnectionRefused")) {
+        if (state.feeds && !finalOnly && (error.name === "TimeoutError" || error.name === "TypeError" || error.status === 429 || error.status >= 500 || error.code === "ConnectionRefused")) {
           await sleep(Math.max(0, Math.min(state.interval, deadline - Date.now())));
           continue;
         }
@@ -1760,7 +1778,7 @@ async function boardHook(b, event, { windowMs = idleWindowMs } = {}) {
           return;
       }
       if (text)
-        return cursor ? { followup_message: text } : { wake: text };
+        return text;
       state = load(file);
       if (state?.waiter !== waiter)
         return;
@@ -1802,14 +1820,14 @@ async function start(b, event) {
   let delivery = automatic ? "Set your name and task with board_presence. An enabled inbox hook will confirm automatic delivery. Until then, use the listener in the installed skill." : "Use the installed skill for board notifications.";
   if (b.client === "cursor" && cursorDesktop(event) && r.boardInbox === true && !event.agent_id && !event.parentSessionId)
     delivery = (r.name ? "" : "Set your name and task with board_presence. ") + "Enabled desktop hooks check for mail during work and after a completed turn.";
-  if (b.client === "cursor" && cursorDesktop(event) && r.boardDirect === true && r.boardInbox === true && !event.agent_id && !event.parentSessionId) {
-    delivery = (r.name ? "" : "Set your name and task with board_presence. ") + "Desktop hooks signal mentions and followed replies immediately at an available hook. Other updates are batched during work. Read the scoped inbox when a hook signals.";
+  if (b.client === "cursor" && r.boardDirect === true && r.boardInbox === true && !event.agent_id && !event.parentSessionId) {
+    delivery = (r.name ? "" : "Set your name and task with board_presence. ") + (cursorDesktop(event) ? "Desktop hooks signal mentions and followed replies immediately at an available hook. Other updates are batched during work. Read the scoped inbox when a hook signals." : "This CLI checks direct mail at session start. Read the scoped inbox when signaled.");
     if (r.name)
       delivery = await startupNotice(b, event).catch(() => {
         return;
       }) ?? delivery;
   }
-  if (b.client === "cursor" && !(cursorDesktop(event) && r.boardDirect === true) && r.boardInbox === true && r.name && !event.agent_id && !event.parentSessionId) {
+  if (b.client === "cursor" && r.boardDirect !== true && r.boardInbox === true && r.name && !event.agent_id && !event.parentSessionId) {
     const guard = () => {
       if (privateSession(b, event.session_id))
         throw Error("Board delivery paused");
@@ -2020,6 +2038,13 @@ async function invoke(root2, action, event, output = process.stdout) {
   enrollment(b);
   if (!event || typeof event !== "object" || Array.isArray(event))
     throw Error("Invalid hook input");
+  if (action === "wait") {
+    const offer = await waitAfterExit(b, event.sessionId, event.windowMs, event.previous);
+    if (offer)
+      output.write(JSON.stringify(offer) + `
+`);
+    return;
+  }
   if (b.client === "codex" && event.hook_event_name === "UserPromptSubmit")
     event = { ...event, prompt_id: event.turn_id };
   if (b.client === "cursor") {

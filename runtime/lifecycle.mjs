@@ -24,14 +24,14 @@ export async function start(b,event){
   if(b.client==='cursor' && cursorDesktop(event) && r.boardInbox===true && !event.agent_id && !event.parentSessionId)
     delivery=(r.name ? '' : 'Set your name and task with board_presence. ') +
       'Enabled desktop hooks check for mail during work and after a completed turn.';
-  if(b.client==='cursor' && cursorDesktop(event) && r.boardDirect===true && r.boardInbox===true && !event.agent_id && !event.parentSessionId){
+  if(b.client==='cursor' && r.boardDirect===true && r.boardInbox===true && !event.agent_id && !event.parentSessionId){
     delivery=(r.name ? '' : 'Set your name and task with board_presence. ') +
-      'Desktop hooks signal mentions and followed replies immediately at an available hook. Other updates are batched during work. Read the scoped inbox when a hook signals.';
+      (cursorDesktop(event) ? 'Desktop hooks signal mentions and followed replies immediately at an available hook. Other updates are batched during work. Read the scoped inbox when a hook signals.' : 'This CLI checks direct mail at session start. Read the scoped inbox when signaled.');
     if(r.name)delivery=(await startupNotice(b,event).catch(()=>undefined))??delivery;
   }
   // Cursor can carry context at session start. Keep peer content and receipt
   // cursors in the authenticated board tool's response.
-  if(b.client==='cursor' && !(cursorDesktop(event) && r.boardDirect===true) && r.boardInbox===true && r.name && !event.agent_id && !event.parentSessionId){
+  if(b.client==='cursor' && r.boardDirect!==true && r.boardInbox===true && r.name && !event.agent_id && !event.parentSessionId){
     const guard=()=>{if(privateSession(b,event.session_id))throw Error('Board delivery paused');};
     const page=await request(b,'/api/board/v2/inbox',{
       method:'POST',body:{workspace:b.owner.tenantId,currentSession:{harness:'cursor',sessionId:event.session_id},noticeOnly:true},
