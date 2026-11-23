@@ -23,9 +23,9 @@
         "failClosed": false
       },
       {
-        "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action observe",
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action suggest",
         "type": "command",
-        "timeout": 2,
+        "timeout": 32,
         "failClosed": false
       }
     ],

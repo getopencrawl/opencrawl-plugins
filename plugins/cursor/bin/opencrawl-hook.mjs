@@ -1369,12 +1369,24 @@ function cursorProjects(event) {
 function projectExcluded(config, session, projects) {
   return (projects.length ? projects : [undefined]).some((path) => excluded(config, session, path));
 }
+function cursorSubmitContext(version) {
+  if (typeof version !== "string")
+    return false;
+  const cli = /^(\d{4}\.\d{2}\.\d{2})-[a-f0-9]+$/.exec(version);
+  if (cli)
+    return cli[1] >= "2026.11.22";
+  const desktop = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  if (!desktop)
+    return false;
+  const [, major, minor, patch] = desktop.map(Number);
+  return major > 3 || major === 3 && (minor > 18 || minor === 18 && patch >= 9);
+}
 async function notePrompt(b, event) {
   if (event.hook_event_name !== "UserPromptSubmit")
     return;
   const selected2 = settings(b), cursor = b.client === "cursor";
   const projects = cursor ? cursorProjects(event) : [event.cwd];
-  if (!selected2 || !projects || event.agent_id || !nativeId(event.session_id) || !nativeId(event.prompt_id) || typeof event.prompt !== "string" || !event.prompt.trim() || projectExcluded(selected2.c, event.session_id, projects))
+  if (!selected2 || !projects || cursor && event.nativeHookName !== "beforeSubmitPrompt" || event.agent_id || !nativeId(event.session_id) || !nativeId(event.prompt_id) || typeof event.prompt !== "string" || !event.prompt.trim() || projectExcluded(selected2.c, event.session_id, projects))
     return;
   const revision = selected2.s.revision;
   const { session, eventKey, key: key2, dir, file, latest } = taskLocation(b, event, revision);
@@ -1425,8 +1437,10 @@ function cursorToolTask(b, event) {
   return { ...task, ...location };
 }
 async function suggest(b, event) {
-  const task = b.client === "cursor" ? cursorToolTask(b, event) : await notePrompt(b, event);
-  if (!task)
+  const cursor = b.client === "cursor";
+  const submit = event.nativeHookName === "beforeSubmitPrompt";
+  const task = cursor && !submit ? cursorToolTask(b, event) : await notePrompt(b, event);
+  if (!task || cursor && submit && !cursorSubmitContext(event.cursor_version))
     return;
   const { file: state, dir, revision } = task, outbox = join5(dir, "events");
   let reports = [];
@@ -1599,7 +1613,9 @@ async function invoke(root2, action, event, output = process.stdout) {
       await new Promise((resolve4, reject) => output.write(JSON.stringify(format(suggestion.output)) + `
 `, (error) => error ? reject(error) : resolve4()));
       suggestion.handoff();
-    }
+    } else if (b.client === "cursor")
+      output.write(JSON.stringify(format()) + `
+`);
     await suggestion?.flush();
     return;
   } else if (action === "capture") {

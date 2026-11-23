@@ -26,10 +26,18 @@ The supported minimum is the later version used for child and durability checks.
   Neither marker appeared in the user prompt or shell output. These diagnostic
   hooks established the delivery point used by the 0.3.6 plugin.
   The beforeSubmitPrompt probe `43ef38ba-2b97-4a34-86f3-44181ca0fc14` returned
-  NO_CONTEXT and triggered no suggestion request. Cursor's documented schema
-  for that event accepts no additional_context. The plugin waits for a tool
-  callback in that generation before requesting suggestions. See
-  [Cursor hooks](https://cursor.com/docs/hooks).
+  NO_CONTEXT and triggered no suggestion request on that older build. The plugin
+  uses the post-tool delivery point there. See [Cursor hooks](https://cursor.com/docs/hooks).
+- Interactive CLI 2026.11.22-e9042b2 skipped plugin-only beforeSubmitPrompt
+  in two turns of session `4d2cfa62-ebbe-46e4-bfb3-c4b0786be58d`. Both ran a
+  read tool and native postToolUse fired. With a project submit hook already
+  present, session `213c50bb-1fac-4314-9dff-646586e77f4e` dispatched the
+  0.3.6 plugin's submit hook. The compiled plugin sent the human prompt to a
+  local fixture and returned its random reference in additional_context.
+  The model repeated the reference before any tool call. The project hook only
+  checked for nonempty input. Personal setup does not install a global hook
+  to change the CLI's dispatch behavior. The Desktop 3.18.9 composer handles
+  submit-time additional_context in its source. The native run above used CLI.
 - Existing daemon 0.4.103 retained five events for session
   `4ea54789-abe2-4578-b829-bd3736c1defb` through actual fixture HTTP503 responses.
   After native exit, endpoint recovery drained the queue and made all five

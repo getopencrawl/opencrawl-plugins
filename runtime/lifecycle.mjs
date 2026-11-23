@@ -84,11 +84,22 @@ function cursorProjects(event){
 function projectExcluded(config,session,projects){
   return (projects.length?projects:[undefined]).some(path=>excluded(config,session,path));
 }
+// Cursor uses a semantic version on desktop and a dated build ID in the CLI.
+// Older hosts can return workspace context after a tool but discard it at submit.
+function cursorSubmitContext(version){
+  if(typeof version!=='string')return false;
+  const cli=/^(\d{4}\.\d{2}\.\d{2})-[a-f0-9]+$/.exec(version);
+  if(cli)return cli[1]>='2026.11.22';
+  const desktop=/^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  if(!desktop)return false;
+  const [,major,minor,patch]=desktop.map(Number);
+  return major>3||major===3&&(minor>18||minor===18&&patch>=9);
+}
 export async function notePrompt(b,event){
   if(event.hook_event_name!=='UserPromptSubmit')return;
   const selected=settings(b),cursor=b.client==='cursor';
   const projects=cursor?cursorProjects(event):[event.cwd];
-  if(!selected||!projects||event.agent_id||!nativeId(event.session_id)||!nativeId(event.prompt_id)||typeof event.prompt!=='string'||!event.prompt.trim()||projectExcluded(selected.c,event.session_id,projects))return;
+  if(!selected||!projects||cursor&&event.nativeHookName!=='beforeSubmitPrompt'||event.agent_id||!nativeId(event.session_id)||!nativeId(event.prompt_id)||typeof event.prompt!=='string'||!event.prompt.trim()||projectExcluded(selected.c,event.session_id,projects))return;
   const revision=selected.s.revision;
   const {session,eventKey,key,dir,file,latest}=taskLocation(b,event,revision);
   return locked(join(dir,'admission.lock'),async()=>{
@@ -124,7 +135,10 @@ function cursorToolTask(b,event){
   return {...task,...location};
 }
 export async function suggest(b,event){
-  const task=b.client==='cursor'?cursorToolTask(b,event):await notePrompt(b,event);if(!task)return;
+  const cursor=b.client==='cursor';
+  const submit=event.nativeHookName==='beforeSubmitPrompt';
+  const task=cursor&&!submit?cursorToolTask(b,event):await notePrompt(b,event);
+  if(!task||cursor&&submit&&!cursorSubmitContext(event.cursor_version))return;
   const {file:state,dir,revision}=task,outbox=join(dir,'events');
   let reports=[];
   const report=(stage,details={})=>{const e={id:randomUUID(),at:new Date().toISOString(),harness:b.client,eventKey:task.eventKey,sessionHash:task.session,stage,...details};reports.push(e);atomic(join(outbox,e.id+'.json'),e);};

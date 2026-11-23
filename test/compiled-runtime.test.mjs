@@ -35,7 +35,7 @@ test('packaged executable captures and uploads with CLI, Node and Bun absent fro
   assert.equal(JSON.parse(readFileSync(join(f.b.profile,'plugin-state',f.b.key,'status.json'))).uploaded,harness==='claude-code'?2:1);
   if(harness==='cursor'){
     const ids={generation_id:'compiled-turn'};
-    const observed=await invoke('observe',f.event,{...ids,hook_event_name:'beforeSubmitPrompt',prompt:'Find earlier work'});
+    const observed=await invoke('suggest',f.event,{...ids,hook_event_name:'beforeSubmitPrompt',prompt:'Find earlier work'});
     assert.deepEqual(JSON.parse(observed),{continue:true});
     const reply=await invoke('suggest',f.event,{...ids,hook_event_name:'postToolUse'});
     assert.match(JSON.parse(reply).additional_context,/A prior result/);
