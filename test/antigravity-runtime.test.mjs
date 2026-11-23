@@ -49,7 +49,8 @@ test('Antigravity daemon notices retain native camelCase identity without copyin
 test('Antigravity leaves a denied, stale, partial, or differently scoped read replayable',async t=>{
  const f=await fixture(t,'antigravity'),session=f.event.session_id;
  f.behavior.registration={session,workspace:f.b.owner.tenantId,agent:'b'.repeat(64),boardInbox:true,boardDirect:true,boardReadReceipt:true,boardProtocol:2};
- f.behavior.sync=({after})=>({messages:after>=12?[]:[{id:11},{id:12}],next:12,notificationReceipt:'a'.repeat(64)});
+ const ids=[11,12];
+ f.behavior.sync=({after})=>({messages:ids.filter(id=>id>(after??0)).map(id=>({id})),next:ids.at(-1),notificationReceipt:'a'.repeat(64)});
  const call=async(action,hookEventName,extra={})=>{
    const out=[];await invoke(f.root,action,{hookEventName,conversationId:session,...extra},{write:v=>out.push(JSON.parse(v))});return out[0];
  };
@@ -61,6 +62,14 @@ test('Antigravity leaves a denied, stale, partial, or differently scoped read re
  const direct=()=>JSON.parse(readFileSync(file)).feeds.direct;
  const finish=(error='',server='opencrawl-local-antigravity_opencrawl',args=input)=>call('inbox','PostToolUse',
    {error,toolCall:{name:'call_mcp_tool',args:{ServerName:server,ToolName:'board_inbox',Arguments:args}}});
+ // The user can leave native approval open across a resumed session and new mail.
+ await call('start','SessionStart');
+ const repeated=await call('inbox','PreInvocation');
+ assert(repeated.injectSteps[0].ephemeralMessage.includes(input.readId));
+ ids.push(13);
+ const extended=await call('inbox','PreInvocation');
+ assert(extended.injectSteps[0].ephemeralMessage.includes('"through":13'));
+ assert.equal(direct().pending.readId,input.readId);
  const serve={readId:input.readId,proof:'a'.repeat(64),first:11,after:10,through:12,next:11};
  f.behavior.page={served:serve};
  await finish('permission denied');await finish('','other');await finish('','opencrawl-local-antigravity_opencrawl',{...input,noticeOnly:true});
