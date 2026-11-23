@@ -526,6 +526,7 @@ test('Cursor Cloud accepts different native generations and checks only direct m
   const stopEvent={status:'completed',loop_count:0};
   assert.deepEqual(await cloud('stop','run-different-generation',stopEvent),{});
   assert.match((await cloud('beforeSubmitPrompt','next-user-prompt')).additional_context,/"through":4/);
+  assert.deepEqual(await cloud('beforeSubmitPrompt','next-user-prompt'),{continue:true});
   available=5;
   const stop=await cloud('stop','newer-stop',stopEvent);
   assert.match(stop.followup_message,/"through":5/);

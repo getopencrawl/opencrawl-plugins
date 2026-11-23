@@ -1654,21 +1654,25 @@ async function boardHook(b, event, { windowMs = idleWindowMs, cursorCloud = fals
     return;
   }
   if (cursor && kind === "UserPromptSubmit" && nativeId(event.generation_id)) {
-    await locked(file + ".lock", () => {
+    const accepted = await locked(file + ".lock", () => {
       const current = load(file);
-      if (current?.enabled) {
+      if (current?.enabled && current.lastPrompt !== event.generation_id) {
         if (current.feeds)
           for (const feed of Object.values(current.feeds)) {
             feed.ticket = null;
             feed.busyUntil = 0;
             if (feed.pending) {
               feed.pending.woken = false;
-              feed.pending.at = 0;
+              if (cursorCloud || current.lastPrompt || current.generation || current.closed)
+                feed.pending.at = 0;
             }
           }
-        atomic(file, { ...current, closed: false, generation: cursorCloud ? undefined : event.generation_id, waiter: null, ticket: null, next: 0, woken: false });
+        atomic(file, { ...current, closed: false, lastPrompt: event.generation_id, generation: cursorCloud ? undefined : event.generation_id, waiter: null, ticket: null, next: 0, woken: false });
+        return true;
       }
     }, 150);
+    if (!accepted)
+      return;
     if (state.feeds && (cursorCloud || cursorSubmitContext(event.cursor_version))) {
       const text2 = await activeFeeds(b, event, file);
       if (text2)
