@@ -4,6 +4,7 @@ import {execFile} from 'node:child_process';
 import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {fixture} from './fixture.mjs';
+import {hash} from '../runtime/io.mjs';
 
 const root=resolve(import.meta.dirname,'..');
 const executable=join(root,'dist/native',process.platform+'-'+process.arch,'opencrawl-hook'+(process.platform==='win32'?'.exe':''));
@@ -50,4 +51,40 @@ test('packaged executable captures and uploads with CLI, Node and Bun absent fro
   await invoke('capture',{...f.event,hook_event_name:'Stop'});
   assert.equal(f.received.filter(r=>r.path==='/api/sessions/batches').flatMap(r=>r.body.events).length,2);
 
+});
+
+test('packaged inbox offers one scoped page and checkpoints its confirmed read',{skip:!existsSync(executable)},async t=>{
+  const artifact=JSON.parse(readFileSync(join(root,'dist/native',process.platform+'-'+process.arch,'artifact.json')));
+  const harness=artifact.harness,f=await fixture(t,harness),id=f.event.session_id,proof='c'.repeat(64);
+  const currentSession={harness,sessionId:id};
+  f.behavior.registration={workspace:f.b.owner.tenantId,session:id,agent:'a'.repeat(64),name:'receiver',
+    boardProtocol:2,boardInbox:true,boardDirect:true,boardReadReceipt:true};
+  f.behavior.sync=body=>({messages:body.delivery==='direct'&&(body.after??0)<8?[{id:8}]:[],next:8,notificationReceipt:proof});
+  function invoke(action,name,fields={}){
+    const event=harness==='cursor'?{...f.event,conversation_id:id,generation_id:'turn-1',cursor_version:'3.18.9',hook_event_name:name}
+      :harness==='antigravity'?{...f.event,conversationId:id,hookEventName:name}:{...f.event,hook_event_name:name};
+    return new Promise((resolve,reject)=>{
+      const child=execFile(executable,['--root',f.root,'--action',action],{cwd:f.root,env:{...process.env,PATH:join(f.root,'empty-path')},timeout:10000},
+        (err,out)=>err?reject(err):resolve(out?JSON.parse(out):{}));
+      child.stdin.end(JSON.stringify({...event,...fields}));
+    });
+  }
+  let notice=await invoke('start',harness==='cursor'?'sessionStart':'SessionStart');
+  if(harness!=='cursor')notice=await invoke('inbox',harness==='antigravity'?'PreInvocation':'UserPromptSubmit');
+  const text=notice.additional_context??notice.hookSpecificOutput?.additionalContext??notice.injectSteps?.[0]?.ephemeralMessage;
+  assert.match(text,/"through":8/);
+  const file=join(f.b.profile,'plugin-state',f.b.key,'board',hash(id)+'.json');
+  const direct=()=>JSON.parse(readFileSync(file)).feeds.direct;
+  const {readId}=direct().pending,args={currentSession,delivery:'direct',after:7,through:8,...(readId?{readId}:{})};
+  const page={next:8,messages:[{id:8,text:'Fixture mail'}],notificationReceipt:proof};
+  if(harness==='antigravity'){
+    f.behavior.page={served:{readId,proof,first:8,after:7,through:8,next:8}};
+    await invoke('inbox','PostToolUse',{toolCall:{name:'mcp_opencrawl-local-antigravity_opencrawl_board_inbox',args},error:''});
+  }else if(harness==='cursor'){
+    await invoke('capture','postToolUse',{tool_name:'MCP:board_inbox',tool_input:args,tool_output:page});
+  }else{
+    await invoke('inbox','PostToolUse',{tool_name:'mcp__opencrawl__board_inbox',tool_input:args,tool_response:page});
+  }
+  assert.equal(direct().pending,null);
+  assert.equal(direct().after,8);
 });
