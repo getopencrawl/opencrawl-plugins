@@ -20,7 +20,7 @@ before(()=>{
   const artifact=JSON.parse(readFileSync(metadata));
   directory=mkdtempSync(join(tmpdir(),'opencrawl-archive-'));
   const archive=join(output,artifact.filename);
-  if(process.platform==='win32')execFileSync('tar.exe',['-xf',archive,'-C',directory]);
+  if(process.platform==='win32')execFileSync(join(process.env.SystemRoot,'System32','tar.exe'),['-xf',archive,'-C',directory]);
   else execFileSync('unzip',['-q',archive,'-d',directory]);
   harness=artifact.harness;
   executable=join(directory,artifact.executable);
