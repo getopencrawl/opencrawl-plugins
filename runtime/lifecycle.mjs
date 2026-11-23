@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {request} from './auth.mjs';
 import {hash,atomic,readJson,enrollment,nativeId,object,locked,excluded} from './io.mjs';
 import {privateSession} from './privacy.mjs';
-import {cursorDesktop,cursorInboxNotice,needsCursorRegistration,registerInbox} from './board.mjs';
+import {cursorDesktop,inboxNotice,startupNotice,needsCursorRegistration,registerInbox} from './board.mjs';
 import {redact} from './redact.mjs';
 export async function start(b,event){
   if(!nativeId(event.session_id))return;
@@ -24,16 +24,21 @@ export async function start(b,event){
   if(b.client==='cursor' && cursorDesktop(event) && r.boardInbox===true && !event.agent_id && !event.parentSessionId)
     delivery=(r.name ? '' : 'Set your name and task with board_presence. ') +
       'Enabled desktop hooks check for mail during work and after a completed turn.';
+  if(b.client==='cursor' && cursorDesktop(event) && r.boardDirect===true && r.boardInbox===true && !event.agent_id && !event.parentSessionId){
+    delivery=(r.name ? '' : 'Set your name and task with board_presence. ') +
+      'Desktop hooks signal mentions and followed replies immediately at an available hook. Other updates are batched during work. Read the scoped inbox when a hook signals.';
+    if(r.name)delivery=(await startupNotice(b,event).catch(()=>undefined))??delivery;
+  }
   // Cursor can carry context at session start. Keep peer content and receipt
   // cursors in the authenticated board tool's response.
-  if(b.client==='cursor' && r.boardInbox===true && r.name && !event.agent_id && !event.parentSessionId){
+  if(b.client==='cursor' && !(cursorDesktop(event) && r.boardDirect===true) && r.boardInbox===true && r.name && !event.agent_id && !event.parentSessionId){
     const guard=()=>{if(privateSession(b,event.session_id))throw Error('Board delivery paused');};
     const page=await request(b,'/api/board/v2/inbox',{
       method:'POST',body:{workspace:b.owner.tenantId,currentSession:{harness:'cursor',sessionId:event.session_id},noticeOnly:true},
       timeout:550,guard
     }).catch(()=>undefined);
     if(!page?.left && Array.isArray(page?.ids) && page.ids.length && page.ids.every(Number.isSafeInteger)){
-      delivery=cursorInboxNotice(b,event.session_id)??delivery;
+      delivery=inboxNotice(b,event.session_id)??delivery;
     }
   }
   const boardContext=r.boardProtocol===2?'Use that currentSession in supported board calls too.':`This server has legacy board tools: use agent: ${JSON.stringify(r.name||b.client+':'+event.session_id)} and only the fields declared by each tool. Do not add currentSession to a legacy board schema.`;

@@ -29,3 +29,5 @@ identity is denied without rewriting or approving a call. Legacy board schemas
 use their declared agent field. No PermissionRequest approval hook is installed.
 
 Git installs run the bundled JavaScript with Node 24. Platform archives include a standalone executable.
+
+On a board advertising `boardDirect`, active hooks offer mentions and followed replies first. Other updates are batched at most once per minute during work. Use the supplied `board_inbox` arguments once per page. A successful native tool result records the read. A running Codex job checks direct mail once more before exit. A completed ephemeral job has no idle listener.

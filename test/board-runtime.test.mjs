@@ -347,3 +347,103 @@ test('only Cursor Desktop offers mail after a tool, quietly throttles and retrie
   assert.deepEqual(await callback('capture','postToolUse'),{});
   assert.equal(reads().length,count);
 });
+
+test('Desktop prioritizes direct notices, batches routine mail only during work and checkpoints successful tool reads',async t=>{
+  const f=await fixture(t,'cursor'),id=f.event.session_id,currentSession={harness:'cursor',sessionId:id};
+  const file=join(f.b.profile,'plugin-state',f.b.key,'board',hash(id)+'.json');
+  const messages={direct:[],routine:[1,2]};
+  const requests=[];
+  f.behavior.registration={session:id,workspace:f.b.owner.tenantId,name:'reader',agent:'c'.repeat(64),boardInbox:true,boardDirect:true,boardProtocol:2};
+  f.behavior.sync=async args=>{
+    requests.push(args);
+    const ids=messages[args.delivery].filter(n=>n>(args.after??0));
+    return {messages:ids.map(id=>({id})),next:Math.max(args.after??0,...ids),more:false,notificationReceipt:'f'.repeat(64)};
+  };
+  async function call(action,name,extra={}){
+    let out='';
+    await invoke(f.root,action,{hook_event_name:name,conversation_id:id,generation_id:'turn',cursor_version:'3.18.9',...extra},{write:x=>{out+=x;}});
+    return JSON.parse(out);
+  }
+  const after=extra=>call('capture','postToolUse',extra);
+  const callback=()=>({hook_event_name:'stop',session_id:id,generation_id:'turn',loop_count:0,status:'completed'});
+  await call('start','sessionStart');
+  await call('capture','beforeSubmitPrompt');
+  assert.deepEqual(await after(),{});
+  assert(requests.every(x=>x.delivery==='direct'));
+  const due=()=>{const s=readJson(file);s.feeds.routine.next=0;atomic(file,s);};
+  due();messages.direct.push(3);
+  assert.match((await after()).additional_context,/"delivery":"direct"/);
+  const urgent=readJson(file).feeds.direct.pending;
+  const digest=(await after()).additional_context;
+  assert.match(digest,/"delivery":"routine"/);
+  assert.match(digest,/"after":0,"through":2/);
+  const input={currentSession,delivery:'direct',after:urgent.after,through:urgent.through};
+  const output=token=>JSON.stringify({content:[{type:'text',text:JSON.stringify({messages:[{id:3,text:'real mail'}],next:3,notificationReceipt:token})}]});
+  await after({tool_name:'MCP:board_inbox',tool_input:input,tool_output:output('bad')});
+  assert(readJson(file).feeds.direct.pending);
+  await after({tool_name:'MCP:board_inbox',tool_input:input,tool_output:output('f'.repeat(64))});
+  assert.equal(readJson(file).feeds.direct.after,3);
+  assert.equal(readJson(file).feeds.direct.pending,null);
+  due();const count=requests.length;
+  assert.equal(await boardHook(f.b,callback(),{windowMs:40}),undefined);
+  assert(requests.slice(count).every(x=>x.delivery==='direct'));
+  assert(readJson(file).feeds.routine.pending);
+});
+
+test('an active Claude prompt takes delivery back from its idle waiter', async t => {
+  const f = await session(t);
+  f.behavior.registration.boardDirect = true;
+  await f.start();
+  const started = Promise.withResolvers(), finish = Promise.withResolvers();
+  const page = {messages:[{id:1}], next:1, notificationReceipt:'a'.repeat(64)};
+  f.behavior.sync = async args => {
+    if (args.waitMs) { started.resolve(); await finish.promise; }
+    return page;
+  };
+  const idle = f.stop(2000);
+  await started.promise;
+  try {
+    const active = await f.inbox('UserPromptSubmit');
+    assert.match(active.hookSpecificOutput.additionalContext, /"delivery":"direct"/);
+  } finally { finish.resolve(); }
+  assert.equal(await idle, undefined);
+});
+
+test('a priority Codex stop checks once, skips routine mail and leaves the next tool eligible', async t => {
+  const f = await session(t, 'codex'), seen = [];
+  f.behavior.registration.boardDirect = true;
+  await f.start();
+  f.behavior.sync = args => {
+    seen.push(args);
+    return {messages:[], next:0};
+  };
+  assert.equal(await f.stop(10_000), undefined);
+  assert.equal(readJson(f.file).waiter, null);
+  await f.inbox('PostToolUse');
+  assert.deepEqual(seen.map(x => [x.delivery, x.waitMs]), [['direct', undefined], ['direct', undefined]]);
+});
+
+test('one service outage does not disarm a Claude direct-mail wait', async t => {
+  const f = await session(t);
+  f.behavior.registration.boardDirect = true;
+  await f.start();
+  f.behavior.sync = () => ({messages:[{id:1}], next:1, notificationReceipt:'d'.repeat(64)});
+  f.behavior.fail = true;
+  const waiting = f.stop(3500);
+  while (!f.received.some(r => r.path === '/api/board/v2/sync')) await delay(8);
+  f.behavior.fail = false;
+  assert.match((await waiting).wake, /"delivery":"direct"/);
+});
+
+test('resuming a chat immediately reoffers the unconfirmed direct page', async t => {
+  const f = await session(t);
+  f.behavior.registration.boardDirect = true;
+  f.behavior.sync = args => (args.after ?? 0) < 3
+    ? {messages:[{id:3}], next:3, notificationReceipt:'c'.repeat(64)}
+    : {messages:[], next:3};
+  await f.start();
+  const first = (await f.stop(500)).wake;
+  await f.inbox('SessionEnd');
+  await f.start();
+  assert.equal((await f.stop(500)).wake, first);
+});

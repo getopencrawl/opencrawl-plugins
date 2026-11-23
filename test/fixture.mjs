@@ -20,6 +20,7 @@ export async function fixture(t,harness='claude-code'){
       res.end(JSON.stringify({data:{principal:behavior.owner}}));behavior.afterIdentity?.();
     }else if(behavior.fail){res.statusCode=503;res.end('{}');}
     else if(req.url==='/api/board/bootstrap'&&behavior.registration)res.end(JSON.stringify({data:behavior.registration}));
+    else if(req.url==='/api/board/v2/sync'&&behavior.sync)res.end(JSON.stringify({data:await behavior.sync(body)}));
     else if(req.url==='/api/board/v2/inbox'&&behavior.page){
       await behavior.beforeInbox?.();
       res.end(JSON.stringify({data:behavior.page}));
