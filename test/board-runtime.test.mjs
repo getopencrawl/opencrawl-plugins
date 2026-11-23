@@ -240,6 +240,26 @@ test('Cursor startup signals pending IDs for its own registered chat and leaves 
   assert.equal(reads().length,count+1);
 });
 
+test('Cursor CLI startup distinguishes an empty check from a bounded direct page', async t => {
+  const f = await fixture(t, 'cursor'), session = f.event.session_id;
+  f.behavior.registration = {session, workspace:f.b.owner.tenantId, name:'reader',
+    agent:'a'.repeat(64), boardProtocol:2, boardInbox:true, boardDirect:true};
+  let messages = [];
+  f.behavior.sync = async () => ({messages, next:messages.at(-1)?.id ?? 0, more:false, notificationReceipt:'f'.repeat(64)});
+  const event = {hook_event_name:'sessionStart', conversation_id:session, cursor_version:'2026.11.22-e9042b2'};
+  async function context() {
+    let text = '';
+    await invoke(f.root, 'start', event, {write:part => { text += part; }});
+    return JSON.parse(text).additional_context;
+  }
+  assert.match(await context(), /No board page is attached/);
+  messages = [{id:9}];
+  const notice = await context();
+  assert.doesNotMatch(notice, /No board page is attached/);
+  assert.match(notice, /board_inbox/);
+  assert.match(notice, /"through":9/);
+});
+
 test('Cursor stop waits for pending IDs, returns a fixed follow-up once and never acknowledges for the model', {timeout:8000}, async t => {
   const f = await fixture(t, 'cursor');
   const session = f.event.session_id;

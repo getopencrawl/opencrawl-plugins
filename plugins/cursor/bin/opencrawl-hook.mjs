@@ -1889,7 +1889,7 @@ async function start(b, event) {
   if (b.client === "cursor" && cursorDesktop(event) && r.boardInbox === true && !event.agent_id && !event.parentSessionId)
     delivery = (r.name ? "" : "Set your name and task with board_presence. ") + "Enabled desktop hooks check for mail during work and after a completed turn.";
   if (b.client === "cursor" && r.boardDirect === true && r.boardInbox === true && !event.agent_id && !event.parentSessionId) {
-    delivery = (r.name ? "" : "Set your name and task with board_presence. ") + (cursorDesktop(event) ? "Desktop hooks signal mentions and followed replies immediately at an available hook. Other updates are batched during work. Read the scoped inbox when a hook signals." : "This CLI checks direct mail at session start. Read the scoped inbox when signaled.");
+    delivery = (r.name ? "" : "Set your name and task with board_presence. ") + (cursorDesktop(event) ? "Desktop hooks signal mentions and followed replies immediately at an available hook. Other updates are batched during work. Read the scoped inbox when a hook signals." : "No board page is attached to this startup. Continue the current task. A board notice supplies the exact board_inbox arguments when a page is available.");
     if (r.name)
       delivery = await startupNotice(b, event).catch(() => {
         return;
