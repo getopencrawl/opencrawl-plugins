@@ -1,7 +1,8 @@
 import test,{after,before} from 'node:test';
 import assert from 'node:assert/strict';
 import {execFile,execFileSync} from 'node:child_process';
-import {existsSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdtempSync,readFileSync,writeFileSync} from 'node:fs';
+import {rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fixture} from './fixture.mjs';
@@ -26,7 +27,7 @@ before(()=>{
   executable=join(directory,artifact.executable);
   assert(existsSync(executable));
 });
-after(()=>{if(directory)rmSync(directory,{recursive:true,force:true,maxRetries:3})});
+after(async()=>{if(directory)await rm(directory,{recursive:true,force:true,maxRetries:8,retryDelay:200})});
 test('packaged executable captures and uploads with CLI, Node and Bun absent from PATH',{skip},async t=>{
   const f=await fixture(t,harness);
   writeFileSync(join(f.root,'bunfig.toml'),'preload = ["./untrusted.mjs"]\n');
