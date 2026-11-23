@@ -447,3 +447,13 @@ test('resuming a chat immediately reoffers the unconfirmed direct page', async t
   await f.start();
   assert.equal((await f.stop(500)).wake, first);
 });
+
+test('registration-backed transports must match their bound owner, installation, server and profile',async t=>{
+ const {boardServers}=await import('../runtime/board.mjs'),f=await fixture(t,'codex');
+ const b={...f.b,owner:{...f.b.owner,userId:'agent_reg_owned'}};
+ const args=['mcp','--api',b.api,'--installation-id',b.installationId,'--registration',b.owner.userId];
+ const valid={command:process.execPath,args,env:{OPENCRAWL_CONFIG_HOME:b.configHome}};
+ const servers={work:valid,foreign:{...valid,args:[...args.slice(0,-1),'agent_reg_other']},moved:{...valid,env:{OPENCRAWL_CONFIG_HOME:'/somewhere-else'}},relative:{...valid,command:'node'}};
+ atomic(join(f.root,'.mcp.json'),{mcpServers:servers});
+ assert.deepEqual(boardServers(b),['work']);assert.deepEqual(boardServers(f.b),[]);
+});

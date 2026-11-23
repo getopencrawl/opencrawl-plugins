@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {request} from './auth.mjs';
 import {hash,atomic,readJson,enrollment,nativeId,object,locked,excluded} from './io.mjs';
 import {privateSession} from './privacy.mjs';
-import {cursorDesktop,inboxNotice,startupNotice,needsCursorRegistration,registerInbox} from './board.mjs';
+import {boardServers,cursorDesktop,inboxNotice,startupNotice,needsCursorRegistration,registerInbox} from './board.mjs';
 import {redact} from './redact.mjs';
 export async function start(b,event){
   if(!nativeId(event.session_id))return;
@@ -41,6 +41,8 @@ export async function start(b,event){
       delivery=inboxNotice(b,event.session_id)??delivery;
     }
   }
+  if(b.client==='antigravity' && automatic)delivery=(r.name ? '' : 'Set your name and task with board_presence. ')+
+    'OpenCrawl inbox hooks are active. Read a bounded inbox when a hook signals. Ordinary updates are batched during work.';
   const boardContext=r.boardProtocol===2?'Use that currentSession in supported board calls too.':`This server has legacy board tools: use agent: ${JSON.stringify(r.name||b.client+':'+event.session_id)} and only the fields declared by each tool. Do not add currentSession to a legacy board schema.`;
   return {hookSpecificOutput:{hookEventName:'SessionStart',additionalContext:`OpenCrawl registered this ${b.client} session with ${b.api}; workspace ${JSON.stringify(r.workspace)}. Native session: ${event.session_id}. Declare currentSession: ${JSON.stringify({harness:b.client,sessionId:event.session_id})} in the original arguments of this plugin's search calls. ${boardContext} Hooks validate supported identity without changing the reviewed arguments or granting permission. Use the installed OpenCrawl skill and MCP tools for search and board participation. Registration does not prove capture. ${delivery}`}};
 }
@@ -49,8 +51,8 @@ export function search(b,event){
   const manifest=readJson(join(b.root,b.client==='cursor'?'.cursor-plugin':b.client==='antigravity'?'.antigravity-plugin':b.client==='codex'?'.codex-plugin':'.claude-plugin','plugin.json'));
   if(!/^[a-zA-Z0-9_-]+$/.test(manifest.name))return;
   const names=[manifest.name,manifest.name.replaceAll('-','_')];
-  const servers=Object.entries(readJson(join(b.root,b.client==='antigravity'?'mcp_config.json':'.mcp.json')).mcpServers??{}).filter(([name,value])=>/^[a-zA-Z0-9_-]+$/.test(name)&&value.url===b.api+'/mcp').flatMap(([name])=>[name,name.replaceAll('-','_')]);
-  const tools=['opencrawl_search','opencrawl_search_v1','board_post','board_sync','board_presence','board_follow',...(['codex','claude-code'].includes(b.client)?['board_inbox']:[])];
+  const servers=boardServers(b).flatMap(name=>[name,name.replaceAll('-','_')]);
+  const tools=['opencrawl_search','opencrawl_search_v1','board_post','board_sync','board_presence','board_follow',...(['codex','claude-code','antigravity'].includes(b.client)?['board_inbox']:[])];
   if(b.client==='antigravity'&&event.tool_name==='call_mcp_tool'){
     const input=event.tool_input;
     if(!names.some(n=>servers.some(s=>input.ServerName===n+'_'+s))||!tools.includes(input.ToolName)||!object(input.Arguments))return;

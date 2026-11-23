@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {join} from 'node:path';
+import {isAbsolute,join} from 'node:path';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {request} from './auth.mjs';
 import {atomic,enrollment,hash,locked,nativeId,readJson} from './io.mjs';
@@ -10,7 +10,7 @@ const routineIntervalMs = 60_000;
 const idleWindowMs = 30 * 60_000;
 const stateFile = (b, id) => join(b.profile, 'plugin-state', b.key, 'board', hash(id) + '.json');
 const load = file => readJson(file, 4096, {missing: true});
-const supported = b => ['claude-code', 'codex', 'cursor'].includes(b.client);
+const supported = b => ['claude-code', 'codex', 'cursor', 'antigravity'].includes(b.client);
 export function needsCursorRegistration(b, event) {
   return b.client === 'cursor' && event.hook_event_name === 'UserPromptSubmit' &&
     !event.agent_id && !event.parentSessionId && nativeId(event.session_id) && !load(stateFile(b, event.session_id));
@@ -19,9 +19,21 @@ export function needsCursorRegistration(b, event) {
 // Desktop versions use dotted release numbers. CLI versions include a date and revision.
 export const cursorDesktop = event => /^\d+\.\d+\.\d+$/.test(event.cursor_version ?? '');
 
+export function boardServers(b) {
+  const filename = b.client === 'antigravity' ? 'mcp_config.json' : b.client === 'cursor' ? 'mcp.json' : '.mcp.json';
+  const servers = readJson(join(b.root, filename), 65536, {missing:true})?.mcpServers ?? {};
+  const registrationArgs = ['mcp','--api',b.api,'--installation-id',b.installationId,'--registration',b.owner.userId];
+  return Object.entries(servers).filter(([name,transport])=>{
+    if (!/^[a-zA-Z0-9_-]+$/.test(name) || !transport) return false;
+    if (transport.url !== undefined) return transport.url === b.api + '/mcp';
+    return b.owner.userId.startsWith('agent_reg_') && typeof transport.command==='string' && isAbsolute(transport.command) &&
+      transport.env?.OPENCRAWL_CONFIG_HOME === b.configHome && Array.isArray(transport.args) &&
+      JSON.stringify(transport.args.slice(-registrationArgs.length)) === JSON.stringify(registrationArgs);
+  }).map(([name])=>name);
+}
+
 export function inboxNotice(b, id, feed) {
-  const servers = readJson(join(b.root, b.client==='cursor'?'mcp.json':'.mcp.json'), 65536, {missing:true})?.mcpServers ?? {};
-  const server = Object.keys(servers).find(name => /^[a-zA-Z0-9_-]+$/.test(name) && servers[name]?.url === b.api + '/mcp');
+  const [server] = boardServers(b);
   if (!server) return;
   const identity = JSON.stringify({harness:b.client, sessionId:id});
   if (feed) {
@@ -35,7 +47,8 @@ export function inboxNotice(b, id, feed) {
 export async function registerInbox(b, event, registration) {
   if (!supported(b) || event.agent_id || event.parentSessionId || !nativeId(event.session_id)) return false;
   const file = stateFile(b, event.session_id);
-  const enabled = registration.boardInbox === true;
+  const enabled = registration.boardInbox === true && (b.client !== 'antigravity' ||
+    registration.boardDirect === true && registration.boardReadReceipt === true);
   const interval = Math.max(1000, Math.min(30_000, Number(registration.pollAfterMs) || 10_000));
   // A resumed session may have lost earlier hook output. Offer pending mail again.
   await locked(file + '.lock', () => {
@@ -202,7 +215,9 @@ async function feedNotice(b,event,file,lane,{waiter,waitMs=0,deadline=Infinity}=
       else if(rows.length){
         pending=pending??{first:rows[0].id,after:rows[0].id-1,proof:page.notificationReceipt};
         pending.through=rows.at(-1).id;
-        text=inboxNotice(b,event.session_id,{delivery:lane,after:pending.after,through:pending.through});
+        if(b.client==='antigravity')pending.readId=randomUUID();
+        text=inboxNotice(b,event.session_id,{delivery:lane,after:pending.after,through:pending.through,
+          ...(pending.readId?{readId:pending.readId}:{})});
         if(text){pending.at=Date.now();pending.woken=Boolean(waiter);if(waiter)state.waiter=null;}
       }
       state.feeds[lane]={...feed,pending,ticket:null,busyUntil:0,...(!pending?{after:page.next}:{})};
@@ -215,6 +230,36 @@ async function feedNotice(b,event,file,lane,{waiter,waitMs=0,deadline=Infinity}=
       if(feed?.ticket===claim.ticket){feed.ticket=null;feed.busyUntil=0;atomic(file,state);}
     },150);
   }
+}
+
+// This host supplies reviewed tool arguments and status but omits the response.
+async function confirmAntigravityRead(b, event, file) {
+  const [server] = boardServers(b);
+  const plugin = readJson(join(b.root,'.antigravity-plugin','plugin.json'),65536,{missing:true})?.name;
+  if (!server || !plugin || event.error !== '') return;
+  const name = plugin + '_' + server;
+  const call = event.tool_input;
+  const input = event.tool_name === 'mcp_' + name + '_board_inbox' ? call :
+    event.tool_name === 'call_mcp_tool' && call?.ServerName === name && call.ToolName === 'board_inbox' ? call.Arguments : undefined;
+  if (!input || !['direct','routine'].includes(input.delivery) || input.noticeOnly ||
+      input.currentSession?.harness !== b.client || input.currentSession.sessionId !== event.session_id) return;
+  const pending = load(file)?.feeds?.[input.delivery]?.pending;
+  if (!pending?.readId || input.readId !== pending.readId || input.after !== pending.after || input.through !== pending.through) return;
+  const guard = () => {if(privateSession(b,event.session_id))throw Error('Board delivery paused');};
+  const {served} = await request(b,'/api/board/v2/inbox',{method:'POST',timeout:550,guard,body:{
+    workspace:b.owner.tenantId,currentSession:input.currentSession,delivery:input.delivery,readId:input.readId,
+    after:input.after,through:input.through,noticeOnly:true
+  }});
+  if (served?.readId !== pending.readId || served.proof !== pending.proof || served.first !== pending.first ||
+      served.after !== pending.after || served.through !== pending.through || !Number.isSafeInteger(served.next) ||
+      served.next < pending.first || served.next > pending.through) return;
+  await locked(file+'.lock',()=>{
+    const state=load(file), feed=state?.feeds?.[input.delivery];
+    if (feed?.pending?.readId !== input.readId) return;
+    enrollment(b);guard();
+    state.feeds[input.delivery]={...feed,after:served.next,pending:null,ticket:null,busyUntil:0};
+    atomic(file,state);
+  },150);
 }
 
 async function activeFeeds(b,event,file) {
@@ -237,6 +282,19 @@ export async function boardHook(b, event, {windowMs = idleWindowMs} = {}) {
   const file = stateFile(b, id);
   let state = load(file);
   if (!state?.enabled) return;
+  if (b.client === 'antigravity') {
+    if (event.hookEventName === 'PostToolUse') return confirmAntigravityRead(b,event,file);
+    if (event.hookEventName === 'PreInvocation') {
+      const text = await activeFeeds(b,event,file);
+      if (text) return {injectSteps:[{ephemeralMessage:text}]};
+    }
+    if (kind === 'Stop' && event.fullyIdle === true && event.continuationActive === false && event.error === '' &&
+        event.terminationReason === 'NO_TOOL_CALL') {
+      const text = await feedNotice(b,event,file,'direct');
+      if (text) return {decision:'continue',reason:text};
+    }
+    return;
+  }
   if (cursor && kind === 'UserPromptSubmit' && nativeId(event.generation_id)) {
     await locked(file + '.lock', () => {
       const current = load(file);
@@ -319,46 +377,50 @@ export async function boardHook(b, event, {windowMs = idleWindowMs} = {}) {
     }
   }, 150);
 
-  while (Date.now() < deadline) {
-    state = load(file);
-    if (!state?.enabled || state.waiter !== waiter || privateSession(b, id)) return;
-    enrollment(b);
-    let text;
-    try {
-      if (state.feeds) {
-        const waitMs=b.client==='codex'?0:Math.max(1,Math.min(20_000,deadline-Date.now())),until=Date.now()+waitMs;
-        text=await feedNotice(b,event,file,'direct',{waiter,waitMs,deadline});
-        if(!text && load(file)?.waiter===waiter && Date.now()<until)await sleep(until-Date.now());
-        if (b.client === 'codex') {
-          if (text) return {decision:'block', reason:text};
-          await locked(file+'.lock', () => {
-            const current=load(file);
-            if (current?.waiter === waiter) atomic(file,{...current,waiter:null});
-          },150);
-          return;
+  try {
+    while (Date.now() < deadline) {
+      state = load(file);
+      if (!state?.enabled || state.waiter !== waiter || privateSession(b, id)) return;
+      enrollment(b);
+      let text;
+      try {
+        if (state.feeds) {
+          const waitMs=b.client==='codex'?0:Math.max(1,Math.min(20_000,deadline-Date.now())),until=Date.now()+waitMs;
+          text=await feedNotice(b,event,file,'direct',{waiter,waitMs,deadline});
+          if(!text && load(file)?.waiter===waiter && Date.now()<until)await sleep(until-Date.now());
+          if (b.client === 'codex') {
+            if (text) return {decision:'block', reason:text};
+            return;
+          }
+          if(text)return cursor?{followup_message:text}:{wake:text};
+          continue;
         }
-        if(text)return cursor?{followup_message:text}:{wake:text};
-        continue;
+        text=await poll(b,id,file,{waiter,deadline});
       }
-      text=await poll(b,id,file,{waiter,deadline});
-    }
-    catch (error) {
-      // A temporary outage can outlive one request. Retry inside the existing
-      // idle window. A changed owner or a permanent denial ends the wait.
-      if (state.feeds && b.client !== 'codex' &&
-          (error.name === 'TimeoutError' || error.name === 'TypeError' ||
-           error.status === 429 || error.status >= 500 || error.code === 'ConnectionRefused')) {
-        await sleep(Math.max(0, Math.min(state.interval, deadline - Date.now())));
-        continue;
+      catch (error) {
+        // A temporary outage can outlive one request. Retry inside the existing
+        // idle window. A changed owner or a permanent denial ends the wait.
+        if (state.feeds && b.client !== 'codex' &&
+            (error.name === 'TimeoutError' || error.name === 'TypeError' ||
+             error.status === 429 || error.status >= 500 || error.code === 'ConnectionRefused')) {
+          await sleep(Math.max(0, Math.min(state.interval, deadline - Date.now())));
+          continue;
+        }
+        // Unnamed sessions cannot read an inbox. Never hold an editor turn open
+        // when the board is unreachable or the current chat cannot participate.
+        if (cursor || state.feeds) return;
       }
-      // Unnamed sessions cannot read an inbox. Never hold an editor turn open
-      // when the board is unreachable or the current chat cannot participate.
-      if (cursor || state.feeds) return;
+      if (text) return cursor ? {followup_message: text} : {wake: text};
+      state = load(file);
+      if (state?.waiter !== waiter) return;
+      const next = state.next - Date.now();
+      await sleep(Math.max(1,Math.min(deadline-Date.now(),next>0?next:state.interval)));
     }
-    if (text) return cursor ? {followup_message: text} : {wake: text};
-    state = load(file);
-    if (state?.waiter !== waiter) return;
-    const next = state.next - Date.now();
-    await sleep(Math.max(1,Math.min(deadline-Date.now(),next>0?next:state.interval)));
+  } finally {
+    // Timeouts and permanent denials must release only this stop's reservation.
+    if (load(file)?.waiter === waiter) await locked(file + '.lock', () => {
+      const current = load(file);
+      if (current?.waiter === waiter) atomic(file, {...current, waiter:null});
+    },150);
   }
 }

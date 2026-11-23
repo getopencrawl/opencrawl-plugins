@@ -1281,21 +1281,32 @@ async function flush(b) {
 
 // runtime/board.mjs
 import { randomUUID as randomUUID3 } from "node:crypto";
-import { join as join5 } from "node:path";
+import { isAbsolute as isAbsolute3, join as join5 } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 var retryOfferMs = 60000;
 var routineIntervalMs = 60000;
 var idleWindowMs = 30 * 60000;
 var stateFile = (b, id) => join5(b.profile, "plugin-state", b.key, "board", hash(id) + ".json");
 var load = (file) => readJson(file, 4096, { missing: true });
-var supported = (b) => ["claude-code", "codex", "cursor"].includes(b.client);
+var supported = (b) => ["claude-code", "codex", "cursor", "antigravity"].includes(b.client);
 function needsCursorRegistration(b, event) {
   return b.client === "cursor" && event.hook_event_name === "UserPromptSubmit" && !event.agent_id && !event.parentSessionId && nativeId(event.session_id) && !load(stateFile(b, event.session_id));
 }
 var cursorDesktop = (event) => /^\d+\.\d+\.\d+$/.test(event.cursor_version ?? "");
+function boardServers(b) {
+  const filename = b.client === "antigravity" ? "mcp_config.json" : b.client === "cursor" ? "mcp.json" : ".mcp.json";
+  const servers = readJson(join5(b.root, filename), 65536, { missing: true })?.mcpServers ?? {};
+  const registrationArgs = ["mcp", "--api", b.api, "--installation-id", b.installationId, "--registration", b.owner.userId];
+  return Object.entries(servers).filter(([name, transport]) => {
+    if (!/^[a-zA-Z0-9_-]+$/.test(name) || !transport)
+      return false;
+    if (transport.url !== undefined)
+      return transport.url === b.api + "/mcp";
+    return b.owner.userId.startsWith("agent_reg_") && typeof transport.command === "string" && isAbsolute3(transport.command) && transport.env?.OPENCRAWL_CONFIG_HOME === b.configHome && Array.isArray(transport.args) && JSON.stringify(transport.args.slice(-registrationArgs.length)) === JSON.stringify(registrationArgs);
+  }).map(([name]) => name);
+}
 function inboxNotice(b, id, feed) {
-  const servers = readJson(join5(b.root, b.client === "cursor" ? "mcp.json" : ".mcp.json"), 65536, { missing: true })?.mcpServers ?? {};
-  const server = Object.keys(servers).find((name) => /^[a-zA-Z0-9_-]+$/.test(name) && servers[name]?.url === b.api + "/mcp");
+  const [server] = boardServers(b);
   if (!server)
     return;
   const identity = JSON.stringify({ harness: b.client, sessionId: id });
@@ -1310,7 +1321,7 @@ async function registerInbox(b, event, registration) {
   if (!supported(b) || event.agent_id || event.parentSessionId || !nativeId(event.session_id))
     return false;
   const file = stateFile(b, event.session_id);
-  const enabled = registration.boardInbox === true;
+  const enabled = registration.boardInbox === true && (b.client !== "antigravity" || registration.boardDirect === true && registration.boardReadReceipt === true);
   const interval = Math.max(1000, Math.min(30000, Number(registration.pollAfterMs) || 1e4));
   await locked(file + ".lock", () => {
     const priority = registration.boardDirect === true && (b.client !== "cursor" || cursorDesktop(event));
@@ -1504,7 +1515,14 @@ async function feedNotice(b, event, file, lane, { waiter, waitMs = 0, deadline =
       else if (rows.length) {
         pending = pending ?? { first: rows[0].id, after: rows[0].id - 1, proof: page.notificationReceipt };
         pending.through = rows.at(-1).id;
-        text = inboxNotice(b, event.session_id, { delivery: lane, after: pending.after, through: pending.through });
+        if (b.client === "antigravity")
+          pending.readId = randomUUID3();
+        text = inboxNotice(b, event.session_id, {
+          delivery: lane,
+          after: pending.after,
+          through: pending.through,
+          ...pending.readId ? { readId: pending.readId } : {}
+        });
         if (text) {
           pending.at = Date.now();
           pending.woken = Boolean(waiter);
@@ -1527,6 +1545,44 @@ async function feedNotice(b, event, file, lane, { waiter, waitMs = 0, deadline =
         }
       }, 150);
   }
+}
+async function confirmAntigravityRead(b, event, file) {
+  const [server] = boardServers(b);
+  const plugin = readJson(join5(b.root, ".antigravity-plugin", "plugin.json"), 65536, { missing: true })?.name;
+  if (!server || !plugin || event.error !== "")
+    return;
+  const name = plugin + "_" + server;
+  const call = event.tool_input;
+  const input = event.tool_name === "mcp_" + name + "_board_inbox" ? call : event.tool_name === "call_mcp_tool" && call?.ServerName === name && call.ToolName === "board_inbox" ? call.Arguments : undefined;
+  if (!input || !["direct", "routine"].includes(input.delivery) || input.noticeOnly || input.currentSession?.harness !== b.client || input.currentSession.sessionId !== event.session_id)
+    return;
+  const pending = load(file)?.feeds?.[input.delivery]?.pending;
+  if (!pending?.readId || input.readId !== pending.readId || input.after !== pending.after || input.through !== pending.through)
+    return;
+  const guard = () => {
+    if (privateSession(b, event.session_id))
+      throw Error("Board delivery paused");
+  };
+  const { served } = await request(b, "/api/board/v2/inbox", { method: "POST", timeout: 550, guard, body: {
+    workspace: b.owner.tenantId,
+    currentSession: input.currentSession,
+    delivery: input.delivery,
+    readId: input.readId,
+    after: input.after,
+    through: input.through,
+    noticeOnly: true
+  } });
+  if (served?.readId !== pending.readId || served.proof !== pending.proof || served.first !== pending.first || served.after !== pending.after || served.through !== pending.through || !Number.isSafeInteger(served.next) || served.next < pending.first || served.next > pending.through)
+    return;
+  await locked(file + ".lock", () => {
+    const state = load(file), feed = state?.feeds?.[input.delivery];
+    if (feed?.pending?.readId !== input.readId)
+      return;
+    enrollment(b);
+    guard();
+    state.feeds[input.delivery] = { ...feed, after: served.next, pending: null, ticket: null, busyUntil: 0 };
+    atomic(file, state);
+  }, 150);
 }
 async function activeFeeds(b, event, file) {
   if (event.hook_event_name === "postToolUse" || event.hook_event_name === "PostToolUse")
@@ -1551,6 +1607,21 @@ async function boardHook(b, event, { windowMs = idleWindowMs } = {}) {
   let state = load(file);
   if (!state?.enabled)
     return;
+  if (b.client === "antigravity") {
+    if (event.hookEventName === "PostToolUse")
+      return confirmAntigravityRead(b, event, file);
+    if (event.hookEventName === "PreInvocation") {
+      const text = await activeFeeds(b, event, file);
+      if (text)
+        return { injectSteps: [{ ephemeralMessage: text }] };
+    }
+    if (kind === "Stop" && event.fullyIdle === true && event.continuationActive === false && event.error === "" && event.terminationReason === "NO_TOOL_CALL") {
+      const text = await feedNotice(b, event, file, "direct");
+      if (text)
+        return { decision: "continue", reason: text };
+    }
+    return;
+  }
   if (cursor && kind === "UserPromptSubmit" && nativeId(event.generation_id)) {
     await locked(file + ".lock", () => {
       const current = load(file);
@@ -1657,48 +1728,52 @@ async function boardHook(b, event, { windowMs = idleWindowMs } = {}) {
       atomic(file, { ...current, waiter, ticket: null });
     }
   }, 150);
-  while (Date.now() < deadline) {
-    state = load(file);
-    if (!state?.enabled || state.waiter !== waiter || privateSession(b, id))
-      return;
-    enrollment(b);
-    let text;
-    try {
-      if (state.feeds) {
-        const waitMs = b.client === "codex" ? 0 : Math.max(1, Math.min(20000, deadline - Date.now())), until = Date.now() + waitMs;
-        text = await feedNotice(b, event, file, "direct", { waiter, waitMs, deadline });
-        if (!text && load(file)?.waiter === waiter && Date.now() < until)
-          await sleep(until - Date.now());
-        if (b.client === "codex") {
-          if (text)
-            return { decision: "block", reason: text };
-          await locked(file + ".lock", () => {
-            const current = load(file);
-            if (current?.waiter === waiter)
-              atomic(file, { ...current, waiter: null });
-          }, 150);
-          return;
-        }
-        if (text)
-          return cursor ? { followup_message: text } : { wake: text };
-        continue;
-      }
-      text = await poll(b, id, file, { waiter, deadline });
-    } catch (error) {
-      if (state.feeds && b.client !== "codex" && (error.name === "TimeoutError" || error.name === "TypeError" || error.status === 429 || error.status >= 500 || error.code === "ConnectionRefused")) {
-        await sleep(Math.max(0, Math.min(state.interval, deadline - Date.now())));
-        continue;
-      }
-      if (cursor || state.feeds)
+  try {
+    while (Date.now() < deadline) {
+      state = load(file);
+      if (!state?.enabled || state.waiter !== waiter || privateSession(b, id))
         return;
+      enrollment(b);
+      let text;
+      try {
+        if (state.feeds) {
+          const waitMs = b.client === "codex" ? 0 : Math.max(1, Math.min(20000, deadline - Date.now())), until = Date.now() + waitMs;
+          text = await feedNotice(b, event, file, "direct", { waiter, waitMs, deadline });
+          if (!text && load(file)?.waiter === waiter && Date.now() < until)
+            await sleep(until - Date.now());
+          if (b.client === "codex") {
+            if (text)
+              return { decision: "block", reason: text };
+            return;
+          }
+          if (text)
+            return cursor ? { followup_message: text } : { wake: text };
+          continue;
+        }
+        text = await poll(b, id, file, { waiter, deadline });
+      } catch (error) {
+        if (state.feeds && b.client !== "codex" && (error.name === "TimeoutError" || error.name === "TypeError" || error.status === 429 || error.status >= 500 || error.code === "ConnectionRefused")) {
+          await sleep(Math.max(0, Math.min(state.interval, deadline - Date.now())));
+          continue;
+        }
+        if (cursor || state.feeds)
+          return;
+      }
+      if (text)
+        return cursor ? { followup_message: text } : { wake: text };
+      state = load(file);
+      if (state?.waiter !== waiter)
+        return;
+      const next = state.next - Date.now();
+      await sleep(Math.max(1, Math.min(deadline - Date.now(), next > 0 ? next : state.interval)));
     }
-    if (text)
-      return cursor ? { followup_message: text } : { wake: text };
-    state = load(file);
-    if (state?.waiter !== waiter)
-      return;
-    const next = state.next - Date.now();
-    await sleep(Math.max(1, Math.min(deadline - Date.now(), next > 0 ? next : state.interval)));
+  } finally {
+    if (load(file)?.waiter === waiter)
+      await locked(file + ".lock", () => {
+        const current = load(file);
+        if (current?.waiter === waiter)
+          atomic(file, { ...current, waiter: null });
+      }, 150);
   }
 }
 
@@ -1751,6 +1826,8 @@ async function start(b, event) {
       delivery = inboxNotice(b, event.session_id) ?? delivery;
     }
   }
+  if (b.client === "antigravity" && automatic)
+    delivery = (r.name ? "" : "Set your name and task with board_presence. ") + "OpenCrawl inbox hooks are active. Read a bounded inbox when a hook signals. Ordinary updates are batched during work.";
   const boardContext = r.boardProtocol === 2 ? "Use that currentSession in supported board calls too." : `This server has legacy board tools: use agent: ${JSON.stringify(r.name || b.client + ":" + event.session_id)} and only the fields declared by each tool. Do not add currentSession to a legacy board schema.`;
   return { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: `OpenCrawl registered this ${b.client} session with ${b.api}; workspace ${JSON.stringify(r.workspace)}. Native session: ${event.session_id}. Declare currentSession: ${JSON.stringify({ harness: b.client, sessionId: event.session_id })} in the original arguments of this plugin's search calls. ${boardContext} Hooks validate supported identity without changing the reviewed arguments or granting permission. Use the installed OpenCrawl skill and MCP tools for search and board participation. Registration does not prove capture. ${delivery}` } };
 }
@@ -1761,8 +1838,8 @@ function search(b, event) {
   if (!/^[a-zA-Z0-9_-]+$/.test(manifest.name))
     return;
   const names2 = [manifest.name, manifest.name.replaceAll("-", "_")];
-  const servers = Object.entries(readJson(join6(b.root, b.client === "antigravity" ? "mcp_config.json" : ".mcp.json")).mcpServers ?? {}).filter(([name, value]) => /^[a-zA-Z0-9_-]+$/.test(name) && value.url === b.api + "/mcp").flatMap(([name]) => [name, name.replaceAll("-", "_")]);
-  const tools = ["opencrawl_search", "opencrawl_search_v1", "board_post", "board_sync", "board_presence", "board_follow", ...["codex", "claude-code"].includes(b.client) ? ["board_inbox"] : []];
+  const servers = boardServers(b).flatMap((name) => [name, name.replaceAll("-", "_")]);
+  const tools = ["opencrawl_search", "opencrawl_search_v1", "board_post", "board_sync", "board_presence", "board_follow", ...["codex", "claude-code", "antigravity"].includes(b.client) ? ["board_inbox"] : []];
   if (b.client === "antigravity" && event.tool_name === "call_mcp_tool") {
     const input = event.tool_input;
     if (!names2.some((n) => servers.some((s) => input.ServerName === n + "_" + s)) || !tools.includes(input.ToolName) || !object(input.Arguments))

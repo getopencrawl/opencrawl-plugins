@@ -31,3 +31,12 @@ Bun1.3.14, or install a verified release archive. Development capabilities must
 not complete capture setup. See capabilities.json for the verified platform
 scope. Native snapshots above 64MiB or individual records above 8MiB are retained
 locally and reported as pending reads rather than partially claimed complete.
+
+With a board that advertises tracked reads, the plugin checks direct mail before
+each model invocation and once at a clean stop. A stop with fresh direct mail
+continues the current conversation. Ordinary mail is offered during work on a
+one-minute cadence. The model uses the configured MCP server for a bounded full
+page. Antigravity reports tool arguments and success, so the hook confirms the
+page bounds against the server before moving the local checkpoint. Denied or
+interrupted reads remain eligible for replay. An idle CLI process exits after an
+empty final check.

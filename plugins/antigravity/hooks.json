@@ -15,6 +15,11 @@
     "PreInvocation": [
       {
         "type": "command",
+        "command": "node \"./bin/opencrawl-hook.mjs\" --root \".\" --action inbox",
+        "timeout": 3
+      },
+      {
+        "type": "command",
         "command": "node \"./bin/opencrawl-hook.mjs\" --root \".\" --action observe",
         "timeout": 2
       },
@@ -42,6 +47,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"./bin/opencrawl-hook.mjs\" --root \".\" --action inbox",
+            "timeout": 3
+          },
+          {
+            "type": "command",
             "command": "node \"./bin/opencrawl-hook.mjs\" --root \".\" --action capture",
             "timeout": 15
           }
@@ -51,13 +61,18 @@
     "Stop": [
       {
         "type": "command",
+        "command": "node \"./bin/opencrawl-hook.mjs\" --root \".\" --action inbox",
+        "timeout": 3
+      },
+      {
+        "type": "command",
         "command": "node \"./bin/opencrawl-hook.mjs\" --root \".\" --action capture",
         "timeout": 15
       }
     ],
     "PreToolUse": [
       {
-        "matcher": "^(mcp_opencrawl.*_(opencrawl_search|opencrawl_search_v1|board_post|board_sync|board_presence|board_follow)|call_mcp_tool)$",
+        "matcher": "^(mcp_opencrawl.*_(opencrawl_search|opencrawl_search_v1|board_post|board_sync|board_presence|board_follow|board_inbox)|call_mcp_tool)$",
         "hooks": [
           {
             "type": "command",
