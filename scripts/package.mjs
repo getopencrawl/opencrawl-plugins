@@ -8,9 +8,9 @@ import {createHash} from 'node:crypto';
 import {archive} from './zip.mts';
 
 const root=resolve(import.meta.dirname,'..');
-const harness=process.argv[2]??'claude-code';
-assert(['claude-code','codex','cursor','antigravity'].includes(harness),'Unsupported local package');
-assert.equal(process.argv.length,3,'Specify one harness');
+const harnesses=process.argv.slice(2);
+assert(harnesses.length,'Specify at least one harness');
+assert(harnesses.every(name=>['claude-code','codex','cursor','antigravity'].includes(name)),'Unsupported local package');
 const platform=process.platform+'-'+process.arch;
 const targets={'darwin-arm64':'bun-darwin-arm64','darwin-x64':'bun-darwin-x64','linux-arm64':'bun-linux-arm64','linux-x64':'bun-linux-x64-baseline','win32-x64':'bun-windows-x64-baseline'};
 assert(targets[platform],'Unsupported runtime platform');
@@ -38,39 +38,41 @@ try{
   execFileSync(bun,arguments_,{stdio:'inherit'});
 }finally{rmSync(runtimeZip,{force:true});rmSync(runtimeDir,{recursive:true,force:true});}
 const source=['auth.mjs','board.mjs','capture.mjs','io.mjs','lifecycle.mjs','main.mjs','privacy.mjs','redact.mjs','THIRD_PARTY_NOTICES.txt'];
-const manifestPath=(harness==='cursor'?'.cursor-plugin':harness==='antigravity'?'.antigravity-plugin':harness==='codex'?'.codex-plugin':'.claude-plugin')+'/plugin.json';
-const skills=['oc-continue','oc-import-memories','opencrawl'];
-const privateSkills=['oc-incognito','oc-private','opencrawl-private','oc-readonly'];
-const base=[manifestPath,'assets/icon.svg','.mcp.json','mcp.json',...(harness==='antigravity'?['mcp_config.json']:[]),'LICENSE','README.md','capabilities.json',
-  ...[...skills,...privateSkills].map(skill=>'skills/'+skill+'/SKILL.md'),
-  ...(harness==='codex'?privateSkills.map(skill=>'skills/'+skill+'/agents/openai.yaml'):[])];
-const directory=join(root,'plugins',harness);
-const manifest=JSON.parse(readFileSync(join(directory,manifestPath)));
-const hooksPath=harness==='antigravity'?'hooks.json':'hooks/hooks.json';
-const hooks=JSON.parse(readFileSync(join(directory,hooksPath)));
-const handlers=harness==='antigravity'?Object.values(hooks).flatMap(group=>Object.values(group).flatMap(list=>Array.isArray(list)?list.flatMap(item=>item.hooks??[item]):[])):Object.values(hooks.hooks).flatMap(groups=>groups.flatMap(group=>group.hooks??[group]));
-for(const hook of handlers){
-  assert.match(hook.command,/^node "[^"]+\/bin\/opencrawl-hook\.mjs" --root /);
-  if(process.platform!=='win32'){
-    hook.command=hook.command.slice(5).replace('/bin/opencrawl-hook.mjs"','/bin/opencrawl-hook"');
-    continue;
+for(const harness of harnesses){
+  const manifestPath=(harness==='cursor'?'.cursor-plugin':harness==='antigravity'?'.antigravity-plugin':harness==='codex'?'.codex-plugin':'.claude-plugin')+'/plugin.json';
+  const skills=['oc-continue','oc-import-memories','opencrawl'];
+  const privateSkills=['oc-incognito','oc-private','opencrawl-private','oc-readonly'];
+  const base=[manifestPath,'assets/icon.svg','.mcp.json','mcp.json',...(harness==='antigravity'?['mcp_config.json']:[]),'LICENSE','README.md','capabilities.json',
+    ...[...skills,...privateSkills].map(skill=>'skills/'+skill+'/SKILL.md'),
+    ...(harness==='codex'?privateSkills.map(skill=>'skills/'+skill+'/agents/openai.yaml'):[])];
+  const directory=join(root,'plugins',harness);
+  const manifest=JSON.parse(readFileSync(join(directory,manifestPath)));
+  const hooksPath=harness==='antigravity'?'hooks.json':'hooks/hooks.json';
+  const hooks=JSON.parse(readFileSync(join(directory,hooksPath)));
+  const handlers=harness==='antigravity'?Object.values(hooks).flatMap(group=>Object.values(group).flatMap(list=>Array.isArray(list)?list.flatMap(item=>item.hooks??[item]):[])):Object.values(hooks.hooks).flatMap(groups=>groups.flatMap(group=>group.hooks??[group]));
+  for(const hook of handlers){
+    assert.match(hook.command,/^node "[^"]+\/bin\/opencrawl-hook\.mjs" --root /);
+    if(process.platform!=='win32'){
+      hook.command=hook.command.slice(5).replace('/bin/opencrawl-hook.mjs"','/bin/opencrawl-hook"');
+      continue;
+    }
+    const action=hook.command.match(/--action ([a-z]+)$/)[1];
+    if(harness==='antigravity'){hook.command='".\\bin\\opencrawl-hook.exe" --root "." --action '+action;continue;}
+    if(harness==='cursor'){hook.command='& "$env:CURSOR_PLUGIN_ROOT\\bin\\opencrawl-hook.exe" --root "$env:CURSOR_PLUGIN_ROOT" --action '+action;continue;}
+    const variable=harness==='codex'?'PLUGIN_ROOT':'CLAUDE_PLUGIN_ROOT';
+    hook.command='& "$env:'+variable+'\\bin\\opencrawl-hook.exe" --root "$env:'+variable+'" --action '+action;
+    hook.shell='powershell';
   }
-  const action=hook.command.match(/--action ([a-z]+)$/)[1];
-  if(harness==='antigravity'){hook.command='".\\bin\\opencrawl-hook.exe" --root "." --action '+action;continue;}
-  if(harness==='cursor'){hook.command='& "$env:CURSOR_PLUGIN_ROOT\\bin\\opencrawl-hook.exe" --root "$env:CURSOR_PLUGIN_ROOT" --action '+action;continue;}
-  const variable=harness==='codex'?'PLUGIN_ROOT':'CLAUDE_PLUGIN_ROOT';
-  hook.command='& "$env:'+variable+'\\bin\\opencrawl-hook.exe" --root "$env:'+variable+'" --action '+action;
-  hook.shell='powershell';
+  const entries=[...base.map(name=>({name,bytes:readFileSync(join(directory,name))})),
+    ...source.map(name=>({name:'runtime/'+name,bytes:readFileSync(join(root,'runtime',name))})),
+    {name:hooksPath,bytes:Buffer.from(JSON.stringify(hooks,null,2)+'\n')},
+    {name:'bin/'+executable,bytes:readFileSync(binary),executable:true}].sort((a,b)=>a.name.localeCompare(b.name));
+  const filename=manifest.name+'-'+harness+'-'+manifest.version+'-'+platform+'.zip';
+  const bytes=archive(entries),sha256=createHash('sha256').update(bytes).digest('hex');
+  writeFileSync(join(out,filename),bytes);
+  writeFileSync(join(out,filename+'.sha256'),sha256+'  '+filename+'\n');
+  const metadata=JSON.stringify({schemaVersion:1,harness,name:manifest.name,version:manifest.version,platform,filename,sha256,executable:'bin/'+executable,source:source.map(n=>'runtime/'+n)},null,2)+'\n';
+  writeFileSync(join(out,'artifact.json'),metadata);
+  writeFileSync(join(out,filename.replace(/\.zip$/,'.json')),metadata);
+  console.log(filename+': '+sha256);
 }
-const entries=[...base.map(name=>({name,bytes:readFileSync(join(directory,name))})),
-  ...source.map(name=>({name:'runtime/'+name,bytes:readFileSync(join(root,'runtime',name))})),
-  {name:hooksPath,bytes:Buffer.from(JSON.stringify(hooks,null,2)+'\n')},
-  {name:'bin/'+executable,bytes:readFileSync(binary),executable:true}].sort((a,b)=>a.name.localeCompare(b.name));
-const filename=manifest.name+'-'+harness+'-'+manifest.version+'-'+platform+'.zip';
-const bytes=archive(entries),sha256=createHash('sha256').update(bytes).digest('hex');
-writeFileSync(join(out,filename),bytes);
-writeFileSync(join(out,filename+'.sha256'),sha256+'  '+filename+'\n');
-const metadata=JSON.stringify({schemaVersion:1,harness,name:manifest.name,version:manifest.version,platform,filename,sha256,executable:'bin/'+executable,source:source.map(n=>'runtime/'+n)},null,2)+'\n';
-writeFileSync(join(out,'artifact.json'),metadata);
-writeFileSync(join(out,filename.replace(/\.zip$/,'.json')),metadata);
-console.log(filename+': '+sha256);

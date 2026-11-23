@@ -1,15 +1,33 @@
-import test from 'node:test';
+import test,{after,before} from 'node:test';
 import assert from 'node:assert/strict';
-import {execFile} from 'node:child_process';
-import {existsSync,readFileSync,writeFileSync} from 'node:fs';
+import {execFile,execFileSync} from 'node:child_process';
+import {existsSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fixture} from './fixture.mjs';
 import {hash} from '../runtime/io.mjs';
 
 const root=resolve(import.meta.dirname,'..');
-const executable=join(root,'dist/native',process.platform+'-'+process.arch,'opencrawl-hook'+(process.platform==='win32'?'.exe':''));
-test('packaged executable captures and uploads with CLI, Node and Bun absent from PATH',{skip:!existsSync(executable)},async t=>{
-  const harness=JSON.parse(readFileSync(join(root,'dist/native',process.platform+'-'+process.arch,'artifact.json'))).harness;
+const platform=process.platform+'-'+process.arch;
+const output=join(root,'dist/native',platform);
+const selected=process.env.OC_TEST_NATIVE_HARNESS;
+const version=selected&&JSON.parse(readFileSync(join(root,'plugins',selected,'capabilities.json'))).version;
+const metadata=join(output,selected?'opencrawl-'+selected+'-'+version+'-'+platform+'.json':'artifact.json');
+const skip=!selected&&!existsSync(metadata);
+let executable,harness,directory;
+before(()=>{
+  if(skip)return;
+  const artifact=JSON.parse(readFileSync(metadata));
+  directory=mkdtempSync(join(tmpdir(),'opencrawl-archive-'));
+  const archive=join(output,artifact.filename);
+  if(process.platform==='win32')execFileSync('tar.exe',['-xf',archive,'-C',directory]);
+  else execFileSync('unzip',['-q',archive,'-d',directory]);
+  harness=artifact.harness;
+  executable=join(directory,artifact.executable);
+  assert(existsSync(executable));
+});
+after(()=>{if(directory)rmSync(directory,{recursive:true,force:true,maxRetries:3})});
+test('packaged executable captures and uploads with CLI, Node and Bun absent from PATH',{skip},async t=>{
   const f=await fixture(t,harness);
   writeFileSync(join(f.root,'bunfig.toml'),'preload = ["./untrusted.mjs"]\n');
   writeFileSync(join(f.root,'untrusted.mjs'),'throw new Error("UNTRUSTED_PROJECT_PRELOAD");\n');
@@ -53,9 +71,8 @@ test('packaged executable captures and uploads with CLI, Node and Bun absent fro
 
 });
 
-test('packaged inbox offers one scoped page and checkpoints its confirmed read',{skip:!existsSync(executable)},async t=>{
-  const artifact=JSON.parse(readFileSync(join(root,'dist/native',process.platform+'-'+process.arch,'artifact.json')));
-  const harness=artifact.harness,f=await fixture(t,harness),id=f.event.session_id,proof='c'.repeat(64);
+test('packaged inbox offers one scoped page and checkpoints its confirmed read',{skip},async t=>{
+  const f=await fixture(t,harness),id=f.event.session_id,proof='c'.repeat(64);
   const currentSession={harness,sessionId:id};
   f.behavior.registration={workspace:f.b.owner.tenantId,session:id,agent:'a'.repeat(64),name:'receiver',
     boardProtocol:2,boardInbox:true,boardDirect:true,boardReadReceipt:true};

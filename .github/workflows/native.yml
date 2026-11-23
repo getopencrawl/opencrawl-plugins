@@ -18,14 +18,13 @@ jobs:
         with:
           bun-version: 1.3.14
       - run: node --test test/runtime.test.mjs test/codex-runtime.test.mjs test/antigravity-runtime.test.mjs test/cursor-runtime.test.mjs
-      - run: node scripts/package.mjs claude-code
-      - run: node --test test/compiled-runtime.test.mjs
-      - run: node scripts/package.mjs codex
-      - run: node --test test/compiled-runtime.test.mjs
-      - run: node scripts/package.mjs antigravity
-      - run: node --test test/compiled-runtime.test.mjs
-      - run: node scripts/package.mjs cursor
-      - run: node --test test/compiled-runtime.test.mjs
+      - run: node scripts/package.mjs claude-code codex antigravity cursor
+      - name: Exercise each native archive
+        shell: bash
+        run: |
+          for harness in claude-code codex antigravity cursor; do
+            OC_TEST_NATIVE_HARNESS="$harness" node --test test/compiled-runtime.test.mjs || exit 1
+          done
       - name: Verify workspace packages on Linux
         if: matrix.runner == 'ubuntu-24.04'
         run: OC_TEST_REPLICAS_PACKAGES=1 node --test test/replicas-runtime.test.mjs
