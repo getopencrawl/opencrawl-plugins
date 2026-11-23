@@ -191,7 +191,7 @@ async function confirmRead(b,file,event) {
   },150);
 }
 
-async function feedNotice(b,event,file,lane,{waiter,waitMs=0,deadline=Infinity,withBounds=false}={}) {
+async function feedNotice(b,event,file,lane,{waiter,waitMs=0,deadline=Infinity,withBounds=false,repeatPending=true}={}) {
   const eligible = state => state?.enabled && state.feeds && !state.closed && (waiter ? state.waiter===waiter :
     !state.waiter && (!state.generation || state.generation===event.generation_id));
   const ready = state => eligible(state) && (lane==='direct' || state.feeds.routine.next<=Date.now());
@@ -202,7 +202,7 @@ async function feedNotice(b,event,file,lane,{waiter,waitMs=0,deadline=Infinity,w
     const feed=state.feeds[lane];
     if (feed.busyUntil>Date.now()) return;
     const ticket=randomUUID(), pending=feed.pending;
-    const retry=pending && (waiter ? !pending.woken : Date.now()-pending.at>=retryOfferMs);
+    const retry=pending && (waiter ? !pending.woken && (repeatPending || !pending.at) : Date.now()-pending.at>=retryOfferMs);
     state.feeds[lane]={...feed,ticket,busyUntil:Date.now()+waitMs+3000,
       ...(lane==='routine'?{next:Date.now()+routineIntervalMs}:{})};
     atomic(file,state);
@@ -324,7 +324,10 @@ export async function boardHook(b, event, {windowMs = idleWindowMs, cursorCloud 
     await locked(file + '.lock', () => {
       const current = load(file);
       if (current?.enabled) {
-        if(current.feeds)for(const feed of Object.values(current.feeds)){feed.ticket=null;feed.busyUntil=0;if(feed.pending)feed.pending.woken=false;}
+        if(current.feeds)for(const feed of Object.values(current.feeds)){
+          feed.ticket=null;feed.busyUntil=0;
+          if(feed.pending){feed.pending.woken=false;feed.pending.at=0;}
+        }
         // Managed Cloud reports a different generation for the prompt, each
         // tool, and the stop. Its conversation is stable. The prompt cancels
         // outstanding requests by invalidating their tickets.
@@ -405,7 +408,7 @@ export async function boardHook(b, event, {windowMs = idleWindowMs, cursorCloud 
   }
   const finalOnly = b.client === 'codex' || cursorCloud;
   const text = await waitForMail(b,event,file,windowMs,{finalOnly});
-  if (text) return cursor ? {followup_message:text} : finalOnly ? {decision:'block',reason:text} : {wake:text};
+  if (text) return cursor ? {followup_message:state.feeds?'Follow the user’s current instructions, including requests to defer board mail. '+text:text} : finalOnly ? {decision:'block',reason:text} : {wake:text};
 }
 
 // Owning launchers may wait after a saved native job exits. The same local
@@ -443,7 +446,10 @@ async function waitForMail(b,event,file,windowMs,{finalOnly=false,supervised=fal
       try {
         if (state.feeds) {
           const waitMs=finalOnly?0:Math.max(1,Math.min(20_000,deadline-Date.now())),until=Date.now()+waitMs;
-          text=await feedNotice(b,event,file,'direct',{waiter,waitMs,deadline,withBounds:supervised});
+          // Cursor gives a stop follow-up the user role. A page already offered
+          // during work can be retried on the next real turn. Only newly due
+          // mail should open another turn while this one is stopping.
+          text=await feedNotice(b,event,file,'direct',{waiter,waitMs,deadline,withBounds:supervised,repeatPending:!cursor||supervised});
           if(!text && load(file)?.waiter===waiter && Date.now()<until)await sleep(until-Date.now());
           if (text || finalOnly) return text;
           continue;

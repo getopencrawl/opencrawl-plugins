@@ -1476,7 +1476,7 @@ async function confirmRead(b, file, event) {
     atomic(file, state);
   }, 150);
 }
-async function feedNotice(b, event, file, lane, { waiter, waitMs = 0, deadline = Infinity, withBounds = false } = {}) {
+async function feedNotice(b, event, file, lane, { waiter, waitMs = 0, deadline = Infinity, withBounds = false, repeatPending = true } = {}) {
   const eligible = (state) => state?.enabled && state.feeds && !state.closed && (waiter ? state.waiter === waiter : !state.waiter && (!state.generation || state.generation === event.generation_id));
   const ready = (state) => eligible(state) && (lane === "direct" || state.feeds.routine.next <= Date.now());
   if (!ready(load(file)))
@@ -1489,7 +1489,7 @@ async function feedNotice(b, event, file, lane, { waiter, waitMs = 0, deadline =
     if (feed.busyUntil > Date.now())
       return;
     const ticket = randomUUID3(), pending = feed.pending;
-    const retry = pending && (waiter ? !pending.woken : Date.now() - pending.at >= retryOfferMs);
+    const retry = pending && (waiter ? !pending.woken && (repeatPending || !pending.at) : Date.now() - pending.at >= retryOfferMs);
     state.feeds[lane] = {
       ...feed,
       ticket,
@@ -1661,8 +1661,10 @@ async function boardHook(b, event, { windowMs = idleWindowMs, cursorCloud = fals
           for (const feed of Object.values(current.feeds)) {
             feed.ticket = null;
             feed.busyUntil = 0;
-            if (feed.pending)
+            if (feed.pending) {
               feed.pending.woken = false;
+              feed.pending.at = 0;
+            }
           }
         atomic(file, { ...current, closed: false, generation: cursorCloud ? undefined : event.generation_id, waiter: null, ticket: null, next: 0, woken: false });
       }
@@ -1758,7 +1760,7 @@ async function boardHook(b, event, { windowMs = idleWindowMs, cursorCloud = fals
   const finalOnly = b.client === "codex" || cursorCloud;
   const text = await waitForMail(b, event, file, windowMs, { finalOnly });
   if (text)
-    return cursor ? { followup_message: text } : finalOnly ? { decision: "block", reason: text } : { wake: text };
+    return cursor ? { followup_message: state.feeds ? "Follow the user’s current instructions, including requests to defer board mail. " + text : text } : finalOnly ? { decision: "block", reason: text } : { wake: text };
 }
 async function waitAfterExit(b, id, windowMs, previous) {
   if (!["cursor", "codex", "antigravity"].includes(b.client) || !nativeId(id) || !Number.isSafeInteger(windowMs) || windowMs <= 0 || windowMs > idleWindowMs || privateSession(b, id))
@@ -1797,7 +1799,7 @@ async function waitForMail(b, event, file, windowMs, { finalOnly = false, superv
       try {
         if (state.feeds) {
           const waitMs = finalOnly ? 0 : Math.max(1, Math.min(20000, deadline - Date.now())), until = Date.now() + waitMs;
-          text = await feedNotice(b, event, file, "direct", { waiter, waitMs, deadline, withBounds: supervised });
+          text = await feedNotice(b, event, file, "direct", { waiter, waitMs, deadline, withBounds: supervised, repeatPending: !cursor || supervised });
           if (!text && load(file)?.waiter === waiter && Date.now() < until)
             await sleep(until - Date.now());
           if (text || finalOnly)

@@ -523,8 +523,13 @@ test('Cursor Cloud accepts different native generations and checks only direct m
   assert.deepEqual(await cloud('beforeSubmitPrompt','prompt-generation'),{continue:true});
   available = 4;
   assert.match((await cloud('postToolUse','different-tool-generation')).additional_context,/"delivery":"direct"/);
-  const stop = await cloud('stop','run-different-generation',{status:'completed',loop_count:0});
-  assert.match(stop.followup_message,/"through":4/);
+  const stopEvent={status:'completed',loop_count:0};
+  assert.deepEqual(await cloud('stop','run-different-generation',stopEvent),{});
+  assert.match((await cloud('beforeSubmitPrompt','next-user-prompt')).additional_context,/"through":4/);
+  available=5;
+  const stop=await cloud('stop','newer-stop',stopEvent);
+  assert.match(stop.followup_message,/"through":5/);
+  assert.match(stop.followup_message,/defer board mail/);
   assert.deepEqual(await cloud('stop','run-different-generation',{status:'completed',loop_count:1}),{});
   assert(calls.every(args=>args.delivery==='direct'&&!args.waitMs));
 });
