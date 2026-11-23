@@ -283,3 +283,66 @@ test('Cursor drops stale stop output on new input, session end, privacy or loss 
     assert.equal(await pending,undefined);
   }
 });
+
+test('the first Cursor prompt recovers a missed sessionStart and addresses the configured inbox', async t => {
+  const f = await fixture(t, 'cursor'), session = f.event.session_id;
+  f.behavior.registration = {session, workspace:f.b.owner.tenantId, agent:'b'.repeat(64), boardInbox:true, boardProtocol:2};
+  f.behavior.page = {ids:[19]};
+  atomic(join(f.root,'mcp.json'),{mcpServers:{other:{url:'https://another.invalid/mcp'},local_board:{url:f.b.api+'/mcp'}}});
+  async function call(action, name, extra={}) {
+    let stdout='';
+    await invoke(f.root,action,{hook_event_name:name,conversation_id:session,generation_id:'manual-turn',...extra},
+      {write:part=>{stdout+=part;}});
+    return JSON.parse(stdout);
+  }
+  await call('capture','beforeSubmitPrompt',{parent_conversation_id:'parent'});
+  assert.equal(f.received.filter(r=>r.path.startsWith('/api/board/')).length,0);
+  await call('capture','beforeSubmitPrompt');
+  await call('capture','beforeSubmitPrompt');
+  assert.equal(f.received.filter(r=>r.path==='/api/board/bootstrap').length,1);
+  const result=await call('inbox','stop',{status:'completed',loop_count:0});
+  assert.match(result.followup_message,/local_board MCP server/);
+  assert(result.followup_message.includes(JSON.stringify({harness:'cursor',sessionId:session})));
+  assert(!result.followup_message.includes('another.invalid'));
+});
+
+test('only Cursor Desktop offers mail after a tool, quietly throttles and retries an unacknowledged offer at stop', async t => {
+  const f = await fixture(t, 'cursor'), id = f.event.session_id;
+  f.behavior.registration = {session:id, workspace:f.b.owner.tenantId, agent:'b'.repeat(64), boardProtocol:2, boardInbox:true};
+  const file = join(f.b.profile,'plugin-state',f.b.key,'board',hash(id)+'.json');
+  const reads = () => f.received.filter(r => r.path === '/api/board/v2/inbox');
+  async function callback(action, name, fields = {}) {
+    let output = '';
+    await invoke(f.root,action,{hook_event_name:name,conversation_id:id,cursor_version:'3.18.9',generation_id:'turn',...fields},
+      {write:part=>{output+=part;}});
+    return JSON.parse(output);
+  }
+  await callback('capture','beforeSubmitPrompt',{generation_id:'turn'});
+  f.behavior.page = {ids:[9], messages:page.messages, cursor:page.cursor};
+  for(const fields of [{cursor_version:'2026.11.22-e9042b2'}, {cursor_version:undefined}, {parent_conversation_id:'parent'},
+      {generation_id:'old-turn'}, {generation_id:undefined}])
+    assert.deepEqual(await callback('capture','postToolUse',fields),{});
+  assert.equal(reads().length,0);
+  f.behavior.page = {ids:[]};
+  assert.deepEqual(await callback('capture','postToolUse'),{});
+  f.behavior.page = {ids:[9], messages:page.messages, cursor:page.cursor};
+  assert.deepEqual(await callback('capture','postToolUse'),{});
+  assert.equal(reads().length,1);
+  const allowPoll = () => atomic(file,{...readJson(file),next:0});
+  allowPoll();
+  const offers = await Promise.all([callback('capture','postToolUse'),callback('capture','postToolUse')]);
+  const messages = offers.map(o=>o.additional_context).filter(Boolean);
+  assert.equal(messages.length,1);
+  assert.match(messages[0],/only the opencrawl MCP server's board_inbox/);
+  assert(!messages[0].includes(page.cursor) && !messages[0].includes('Fixture mail'));
+  allowPoll();
+  assert.deepEqual(await callback('capture','postToolUse'),{});
+  allowPoll();
+  const wake = await callback('inbox','stop',{status:'completed',loop_count:0,generation_id:'turn'});
+  assert.equal(wake.followup_message,messages[0]);
+  assert(reads().every(r=>r.body.noticeOnly===true && !r.body.acknowledge));
+  markPrivate(f.b,{harness:'cursor',sessionId:id});
+  const count = reads().length;
+  assert.deepEqual(await callback('capture','postToolUse'),{});
+  assert.equal(reads().length,count);
+});

@@ -63,6 +63,7 @@ export async function invoke(root,action,event,output=process.stdout){
     await suggestion?.flush();return;
   }else if(action==='capture'){
     if(b.client==='cursor' && ['UserPromptSubmit','sessionEnd'].includes(event.hook_event_name)){
+      if(event.hook_event_name==='UserPromptSubmit')await start(b,event).catch(()=>undefined);
       await boardHook(b,event).catch(()=>undefined);
     }
     // Cursor child paths are newer than the legacy daemon reader. The plugin
@@ -78,7 +79,12 @@ export async function invoke(root,action,event,output=process.stdout){
         try{result.uploaded=await flush(b);}catch{result.pendingUpload=true;}
       }
     }
-    atomic(join(b.profile,'plugin-state',b.key,'status.json'),{at:new Date().toISOString(),harness:b.client,...result});if(b.client==='cursor')output.write(JSON.stringify(format())+'\n');return;
+    atomic(join(b.profile,'plugin-state',b.key,'status.json'),{at:new Date().toISOString(),harness:b.client,...result});
+    if(b.client==='cursor'){
+      const notice=event.nativeHookName==='postToolUse' ? await boardHook(b,event).catch(()=>undefined) : undefined;
+      output.write(JSON.stringify(format(notice))+'\n');
+    }
+    return;
   }else throw Error('Unsupported lifecycle action');
   if(result||['antigravity','cursor'].includes(b.client)&&action==='search')output.write(JSON.stringify(format(result))+'\n');
 }

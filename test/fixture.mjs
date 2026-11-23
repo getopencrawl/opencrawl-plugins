@@ -41,6 +41,7 @@ export async function fixture(t,harness='claude-code'){
   atomic(join(root,'.codex-plugin','plugin.json'),{name:'opencrawl-local-codex'});
   atomic(join(root,'.antigravity-plugin','plugin.json'),{name:'opencrawl-local-antigravity'});
   atomic(join(root,'.mcp.json'),{mcpServers:{opencrawl:{type:'http',url:api+'/mcp'}}});
+  if(harness==='cursor')atomic(join(root,'mcp.json'),{mcpServers:{opencrawl:{type:'http',url:api+'/mcp'}}});
   atomic(join(root,'mcp_config.json'),{mcpServers:{opencrawl:{url:api+'/mcp'}}});
   const b=binding(root),config={schemaVersion:1,api,installationId:value.installationId,owner,installedAt:new Date(Date.now()-60000).toISOString(),harnesses:[harness],roots:{[harness]:native}};
   atomic(join(b.capture,'config.json'),config);

@@ -4,10 +4,13 @@ import {randomUUID} from 'node:crypto';
 import {request} from './auth.mjs';
 import {hash,atomic,readJson,enrollment,nativeId,object,locked,excluded} from './io.mjs';
 import {privateSession} from './privacy.mjs';
-import {registerInbox} from './board.mjs';
+import {cursorDesktop,cursorInboxNotice,needsCursorRegistration,registerInbox} from './board.mjs';
 import {redact} from './redact.mjs';
 export async function start(b,event){
-  if(event.hook_event_name!=='SessionStart'||!nativeId(event.session_id))return;
+  if(!nativeId(event.session_id))return;
+  const startup=event.hook_event_name==='SessionStart';
+  // The editor can create its first chat before the workspace hooks load.
+  if(!startup&&!needsCursorRegistration(b,event))return;
   await request(b,'/api/sessions/identity',{identity:true,timeout:2000});
   const r=await request(b,'/api/board/bootstrap',{method:'POST',body:{session:event.session_id,harness:b.client,workspace:b.owner.tenantId},timeout:2500});
   if(r.session!==event.session_id||r.workspace!==b.owner.tenantId||!/^[a-f0-9]{64}$/.test(r.agent??''))throw Error('Registration did not match the configured session');
@@ -16,7 +19,10 @@ export async function start(b,event){
   const saved=readJson(file,65536,{missing:true});
   if(saved?.workspace!==r.workspace||saved?.agent!==r.agent)atomic(file,{workspace:r.workspace,agent:r.agent,name:r.name});
   const automatic=await registerInbox(b,event,r).catch(()=>false);
+  if(!startup)return;
   let delivery=automatic?'Set your name and task with board_presence. An enabled inbox hook will confirm automatic delivery. Until then, use the listener in the installed skill.':'Use the installed skill for board notifications.';
+  if(b.client==='cursor' && cursorDesktop(event) && r.boardInbox===true && !event.agent_id && !event.parentSessionId)
+    delivery='Set your name and task with board_presence. Enabled desktop hooks check for mail during work and after a completed turn.';
   // Cursor can carry context at session start. Keep peer content and receipt
   // cursors in the authenticated board tool's response.
   if(b.client==='cursor' && r.boardInbox===true && r.name && !event.agent_id && !event.parentSessionId){
@@ -26,7 +32,7 @@ export async function start(b,event){
       timeout:550,guard
     }).catch(()=>undefined);
     if(!page?.left && Array.isArray(page?.ids) && page.ids.length && page.ids.every(Number.isSafeInteger)){
-      delivery='OpenCrawl board mail is waiting. Use board_inbox with this currentSession to read it. Handle the page and acknowledge the cursor returned by the board tool.';
+      delivery=cursorInboxNotice(b,event.session_id)??delivery;
     }
   }
   const boardContext=r.boardProtocol===2?'Use that currentSession in supported board calls too.':`This server has legacy board tools: use agent: ${JSON.stringify(r.name||b.client+':'+event.session_id)} and only the fields declared by each tool. Do not add currentSession to a legacy board schema.`;
