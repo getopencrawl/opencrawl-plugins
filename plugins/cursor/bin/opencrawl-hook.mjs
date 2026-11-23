@@ -1686,7 +1686,7 @@ async function boardHook(b, event, { windowMs = (b.boardIdleMinutes ?? 30) * 600
     }
     return;
   }
-  if (kind === "UserPromptSubmit" && !cursor && state.feeds && (state.waiter || state.closed)) {
+  if (kind === "UserPromptSubmit" && !cursor && state.feeds && (state.waiter || state.closed || state.feeds.direct.pending)) {
     await locked(file + ".lock", () => {
       const current = load(file);
       if (!current?.feeds)
@@ -1694,8 +1694,10 @@ async function boardHook(b, event, { windowMs = (b.boardIdleMinutes ?? 30) * 600
       for (const feed of Object.values(current.feeds)) {
         feed.ticket = null;
         feed.busyUntil = 0;
-        if (feed.pending)
+        if (feed.pending) {
           feed.pending.woken = false;
+          feed.pending.at = 0;
+        }
       }
       atomic(file, { ...current, closed: false, waiter: null, ticket: null });
     }, 150);
@@ -1809,7 +1811,7 @@ async function waitForMail(b, event, file, windowMs, { finalOnly = false, superv
       try {
         if (state.feeds) {
           const waitMs = finalOnly ? 0 : Math.max(1, Math.min(20000, deadline - Date.now())), until = Date.now() + waitMs;
-          text = await feedNotice(b, event, file, "direct", { waiter, waitMs, deadline, withBounds: supervised, repeatPending: !cursor || supervised });
+          text = await feedNotice(b, event, file, "direct", { waiter, waitMs, deadline, withBounds: supervised, repeatPending: supervised });
           if (!text && load(file)?.waiter === waiter && Date.now() < until)
             await sleep(until - Date.now());
           if (text || finalOnly)

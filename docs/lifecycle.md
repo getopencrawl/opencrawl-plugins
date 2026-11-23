@@ -38,6 +38,10 @@ sets how long a clean stop listens for direct mail. It defaults to 30. Set it
 to 0 for one final check, or to 1–30 for a bounded wait. Cloud Cursor and
 Codex perform one final check regardless of this setting. A launcher that owns
 a saved CLI session can set its own wait with `examples/idle.mjs`.
+
+When Claude Code or Codex has already offered a page during work, stopping
+leaves that page pending. The next user prompt can offer it again. New direct
+mail can still wake an open Claude session or reach a Codex final check.
 The enrollment must match the binding's origin, installation and owner on every
 invocation, and must still select that harness. Saved exclusions and recording
 opt-outs remain authoritative. Changing binding cannot redirect an old queue.

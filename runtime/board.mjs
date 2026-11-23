@@ -348,14 +348,17 @@ export async function boardHook(b, event, {windowMs = (b.boardIdleMinutes ?? 30)
     }
     return;
   }
-  if (kind === 'UserPromptSubmit' && !cursor && state.feeds && (state.waiter || state.closed)) {
+  if (kind === 'UserPromptSubmit' && !cursor && state.feeds && (state.waiter || state.closed || state.feeds.direct.pending)) {
     await locked(file+'.lock',()=>{
       const current=load(file);
       if (!current?.feeds) return;
       for (const feed of Object.values(current.feeds)) {
         feed.ticket = null;
         feed.busyUntil = 0;
-        if (feed.pending) feed.pending.woken = false;
+        if (feed.pending) {
+          feed.pending.woken = false;
+          feed.pending.at = 0;
+        }
       }
       atomic(file, {...current, closed:false, waiter:null, ticket:null});
     },150);
@@ -454,10 +457,10 @@ async function waitForMail(b,event,file,windowMs,{finalOnly=false,supervised=fal
       try {
         if (state.feeds) {
           const waitMs=finalOnly?0:Math.max(1,Math.min(20_000,deadline-Date.now())),until=Date.now()+waitMs;
-          // Cursor gives a stop follow-up the user role. A page already offered
-          // during work can be retried on the next real turn. Only newly due
-          // mail should open another turn while this one is stopping.
-          text=await feedNotice(b,event,file,'direct',{waiter,waitMs,deadline,withBounds:supervised,repeatPending:!cursor||supervised});
+          // A native Stop wakes for newly arrived mail. A page offered during
+          // work stays pending for the next user turn. A replacement supervisor
+          // can also replay a dispatch interrupted before its saved job resumed.
+          text=await feedNotice(b,event,file,'direct',{waiter,waitMs,deadline,withBounds:supervised,repeatPending:supervised});
           if(!text && load(file)?.waiter===waiter && Date.now()<until)await sleep(until-Date.now());
           if (text || finalOnly) return text;
           continue;

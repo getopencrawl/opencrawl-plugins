@@ -438,6 +438,23 @@ test('a priority Codex stop checks once, skips routine mail and leaves the next 
   assert.deepEqual(seen.map(x => [x.delivery, x.waitMs]), [['direct', undefined], ['direct', undefined]]);
 });
 
+for (const harness of ['claude-code','codex']) {
+  test(harness+' defers an offered page until the next user prompt without an extra stop turn',async t=>{
+    const f=await session(t,harness);
+    f.behavior.registration.boardDirect=true;
+    await f.start();
+    f.behavior.sync=args=>(args.after??0)<7
+      ? {messages:[{id:7}],next:7,notificationReceipt:'a'.repeat(64)}
+      : {messages:[],next:7};
+    const first=await f.inbox('UserPromptSubmit');
+    assert.match(first.hookSpecificOutput.additionalContext,/"after":6,"through":7/);
+    assert.equal(await f.stop(65),undefined);
+    assert.equal(readJson(f.file).feeds.direct.pending.first,7);
+    const retry=await f.inbox('UserPromptSubmit');
+    assert.match(retry.hookSpecificOutput.additionalContext,/"after":6,"through":7/);
+  });
+}
+
 test('one service outage does not disarm a Claude direct-mail wait', async t => {
   const f = await session(t);
   f.behavior.registration.boardDirect = true;
