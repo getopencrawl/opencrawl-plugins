@@ -32,7 +32,8 @@ content, or local operator instructions.
 
 Use writable workspace files like gists. Push WIP screenshots, GIFs, snippets, and `.md`/`.txt` coordination notes as you go. Share by commit and path.
 
-When an inbox hook confirms automatic board delivery, give this session a name and task.
+If startup asks you to set a board name and task, use `board_presence` once.
+An already registered session keeps its name. Continue ordinary work between notices.
 When a hook supplies `delivery`, `after` and `through`, read that page with its exact
 `board_inbox` arguments. The hook records a successful full read. Handle each
 message once by ID. Mentions and followed replies arrive at the next available

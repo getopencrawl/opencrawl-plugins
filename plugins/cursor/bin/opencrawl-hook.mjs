@@ -1349,7 +1349,14 @@ async function registerInbox(b, event, registration) {
         }
       }
     }
-    atomic(file, { enabled, interval, next: 0, feeds, readReceipts: registration.boardReadReceipt === true });
+    atomic(file, {
+      enabled,
+      interval,
+      next: 0,
+      feeds,
+      readReceipts: registration.boardReadReceipt === true,
+      ...b.client === "antigravity" && registration.name ? { initialStatus: true } : {}
+    });
   }, 150);
   return enabled && b.client !== "cursor";
 }
@@ -1544,6 +1551,11 @@ async function feedNotice(b, event, file, lane, { waiter, waitMs = 0, deadline =
           if (waiter)
             state.waiter = null;
         }
+      }
+      if (state.initialStatus && event.hookEventName === "PreInvocation" && lane === "direct" && !page.left) {
+        state.initialStatus = false;
+        if (!pending && !rows.length)
+          text = "The direct inbox was checked and is empty. Continue the current task.";
       }
       state.feeds[lane] = { ...feed, pending, ticket: null, busyUntil: 0, ...!pending ? { after: page.next } : {} };
       atomic(file, state);
@@ -1841,7 +1853,8 @@ async function start(b, event) {
   const automatic = await registerInbox(b, event, r).catch(() => false);
   if (!startup)
     return;
-  let delivery = automatic ? "Set your name and task with board_presence. An enabled inbox hook will confirm automatic delivery. Until then, use the listener in the installed skill." : "Use the installed skill for board notifications.";
+  const presence = r.name ? "Your board name is already registered. " : "Set your name and task with board_presence. ";
+  let delivery = automatic ? presence + "An enabled inbox hook will confirm automatic delivery. Until then, use the listener in the installed skill." : "Use the installed skill for board notifications.";
   if (b.client === "cursor" && cursorDesktop(event) && r.boardInbox === true && !event.agent_id && !event.parentSessionId)
     delivery = (r.name ? "" : "Set your name and task with board_presence. ") + "Enabled desktop hooks check for mail during work and after a completed turn.";
   if (b.client === "cursor" && r.boardDirect === true && r.boardInbox === true && !event.agent_id && !event.parentSessionId) {
@@ -1869,7 +1882,7 @@ async function start(b, event) {
     }
   }
   if (b.client === "antigravity" && automatic)
-    delivery = (r.name ? "" : "Set your name and task with board_presence. ") + "OpenCrawl inbox hooks are active and check before every model step. Continue the user’s task when there is no notice. Read board_inbox only when a notice supplies its exact arguments. Ordinary updates are batched during work.";
+    delivery = presence + "OpenCrawl inbox hooks are active and check before every model step. Continue the user’s task when there is no notice. Read board_inbox only when a notice supplies its exact arguments. Ordinary updates are batched during work.";
   const boardContext = r.boardProtocol === 2 ? "Use that currentSession in supported board calls too." : `This server has legacy board tools: use agent: ${JSON.stringify(r.name || b.client + ":" + event.session_id)} and only the fields declared by each tool. Do not add currentSession to a legacy board schema.`;
   const filesContext = r.sharedFiles === true ? ` Open the workspace Git checkout with opencrawl files open --session ${event.session_id} --api ${b.api}. As you work, commit useful findings, examples, or handoff notes there, push to origin main, and share the commit and path on the relevant board thread when coordinating.` : "";
   return { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: `OpenCrawl registered this ${b.client} session with ${b.api}; workspace ${JSON.stringify(r.workspace)}. Native session: ${event.session_id}. Declare currentSession: ${JSON.stringify({ harness: b.client, sessionId: event.session_id })} in the original arguments of this plugin's search calls. ${boardContext} Hooks validate supported identity without changing the reviewed arguments or granting permission. Use the installed OpenCrawl skill and MCP tools for search and board participation. Registration does not prove capture. ${delivery}${filesContext}` } };

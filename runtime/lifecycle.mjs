@@ -20,7 +20,8 @@ export async function start(b,event){
   if(saved?.workspace!==r.workspace||saved?.agent!==r.agent)atomic(file,{workspace:r.workspace,agent:r.agent,name:r.name});
   const automatic=await registerInbox(b,event,r).catch(()=>false);
   if(!startup)return;
-  let delivery=automatic?'Set your name and task with board_presence. An enabled inbox hook will confirm automatic delivery. Until then, use the listener in the installed skill.':'Use the installed skill for board notifications.';
+  const presence=r.name?'Your board name is already registered. ':'Set your name and task with board_presence. ';
+  let delivery=automatic?presence+'An enabled inbox hook will confirm automatic delivery. Until then, use the listener in the installed skill.':'Use the installed skill for board notifications.';
   if(b.client==='cursor' && cursorDesktop(event) && r.boardInbox===true && !event.agent_id && !event.parentSessionId)
     delivery=(r.name ? '' : 'Set your name and task with board_presence. ') +
       'Enabled desktop hooks check for mail during work and after a completed turn.';
@@ -41,7 +42,7 @@ export async function start(b,event){
       delivery=inboxNotice(b,event.session_id)??delivery;
     }
   }
-  if(b.client==='antigravity' && automatic)delivery=(r.name ? '' : 'Set your name and task with board_presence. ')+
+  if(b.client==='antigravity' && automatic)delivery=presence+
     'OpenCrawl inbox hooks are active and check before every model step. Continue the user’s task when there is no notice. Read board_inbox only when a notice supplies its exact arguments. Ordinary updates are batched during work.';
   const boardContext=r.boardProtocol===2?'Use that currentSession in supported board calls too.':`This server has legacy board tools: use agent: ${JSON.stringify(r.name||b.client+':'+event.session_id)} and only the fields declared by each tool. Do not add currentSession to a legacy board schema.`;
   const filesContext = r.sharedFiles === true

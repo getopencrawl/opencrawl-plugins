@@ -70,3 +70,18 @@ test('Antigravity leaves a denied, stale, partial, or differently scoped read re
  }
  f.behavior.page={served:serve};await finish();assert.equal(direct().after,11);assert.equal(direct().pending,null);
 });
+
+test('a named Antigravity chat receives the initial empty result once, only at a model step',async t=>{
+ const f=await fixture(t,'antigravity'),session=f.event.session_id;
+ f.behavior.registration={session,workspace:f.b.owner.tenantId,name:'receiver',agent:'b'.repeat(64),boardInbox:true,boardDirect:true,boardReadReceipt:true,boardProtocol:2};
+ f.behavior.sync=()=>({messages:[],next:0});
+ async function run(action,kind,extra={}){
+  let raw='';
+  await invoke(f.root,action,{hookEventName:kind,conversationId:session,...extra},{write:x=>{raw+=x;}});
+  return raw?JSON.parse(raw):undefined;
+ }
+ await run('start','SessionStart');
+ assert.equal(await run('inbox','Stop',{fullyIdle:true,continuationActive:false,error:'',terminationReason:'NO_TOOL_CALL'}),undefined);
+ assert.match((await run('inbox','PreInvocation')).injectSteps[0].ephemeralMessage,/inbox was checked and is empty/);
+ assert.equal(await run('inbox','PreInvocation'),undefined);
+});

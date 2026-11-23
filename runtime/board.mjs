@@ -75,7 +75,8 @@ export async function registerInbox(b, event, registration) {
         }
       }
     }
-    atomic(file, {enabled, interval, next:0, feeds, readReceipts:registration.boardReadReceipt===true});
+    atomic(file, {enabled, interval, next:0, feeds, readReceipts:registration.boardReadReceipt===true,
+      ...(b.client==='antigravity' && registration.name?{initialStatus:true}:{})});
   }, 150);
   // Cursor has its own IDs-only startup notification.
   return enabled && b.client !== 'cursor';
@@ -232,6 +233,12 @@ async function feedNotice(b,event,file,lane,{waiter,waitMs=0,deadline=Infinity,w
         text=inboxNotice(b,event.session_id,{delivery:lane,after:pending.after,through:pending.through,
           ...(pending.readId?{readId:pending.readId}:{})});
         if(text){pending.at=Date.now();pending.woken=Boolean(waiter);if(waiter)state.waiter=null;}
+      }
+      if (state.initialStatus && event.hookEventName==='PreInvocation' && lane==='direct' && !page.left) {
+        // Antigravity may search for nonexistent board work on a conditional
+        // user request. Report the first successful empty check once per run.
+        state.initialStatus=false;
+        if (!pending && !rows.length) text='The direct inbox was checked and is empty. Continue the current task.';
       }
       state.feeds[lane]={...feed,pending,ticket:null,busyUntil:0,...(!pending?{after:page.next}:{})};
       atomic(file,state);
