@@ -27,11 +27,19 @@ SessionStart provides native identity for original MCP arguments. The search
 guard covers only the two OpenCrawl search aliases because Cursor preToolUse
 omits the MCP server namespace. It does not rewrite arguments or intercept
 unrelated generic board names. Native workspace trust and tool approval remain
-authoritative. SessionStart context reaches the first model invocation. Native
-postToolUse also accepts context, verified with a separate synthetic probe, but
-this package does not implement paid post-tool suggestions. beforeSubmitPrompt
-does not accept additional_context and can be omitted by the CLI in print mode;
-per-prompt suggestions are unsupported and no billable suggestion hook is shipped.
+authoritative. SessionStart context reaches the first model invocation.
+
+With suggestions enabled, the native beforeSubmitPrompt hook checks redacted
+human prompts for relevant workspace history. Cursor Desktop 3.18.9 and newer
+and interactive CLI builds dated 2026.11.22 or later can receive context before
+the first response. On older hosts the plugin waits for a tool completion or
+failure in the same generation. That fallback skips tool-free turns.
+
+Some CLI modes omit the submit hook. The 2026.11.22 interactive CLI skips it
+with only plugin hooks installed. A user or project submit hook already present
+lets that CLI dispatch the plugin hook too. A missing submit event skips the
+automatic check. Manual search remains available. Existing suggestion opt-outs
+apply on every path.
 
 Direct capture retains failed uploads for another hook. Optional daemon mode
 uses the same plugin converter and hands the immutable queue to the existing

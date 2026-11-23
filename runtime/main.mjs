@@ -52,6 +52,7 @@ export async function invoke(root,action,event,output=process.stdout){
   else if(action==='suggest'){
     const suggestion=await suggest(b,event);
     if(suggestion?.output){suggestion.guard();await new Promise((resolve,reject)=>output.write(JSON.stringify(format(suggestion.output))+'\n',error=>error?reject(error):resolve()));suggestion.handoff();}
+    else if(b.client==='cursor')output.write(JSON.stringify(format())+'\n');
     await suggestion?.flush();return;
   }else if(action==='capture'){
     // Cursor child paths are newer than the legacy daemon reader. The plugin

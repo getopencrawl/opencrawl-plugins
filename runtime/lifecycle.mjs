@@ -1,4 +1,4 @@
-import {join} from 'node:path';
+import {isAbsolute,join} from 'node:path';
 import {readdirSync,unlinkSync,existsSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {request} from './auth.mjs';
@@ -66,17 +66,46 @@ function settings(b){
   }
   if(!c.disabled&&c.harnesses?.includes(b.client))return {c,s:{revision:'recording-default-v1'}};
 }
-export async function notePrompt(b,event){
-  if(event.hook_event_name!=='UserPromptSubmit')return;
-  const selected=settings(b);
-  if(!selected||event.hook_event_name!=='UserPromptSubmit'||event.agent_id||!nativeId(event.session_id)||!nativeId(event.prompt_id)||typeof event.prompt!=='string'||!event.prompt.trim()||excluded(selected.c,event.session_id,event.cwd))return;
-  const revision=selected.s.revision,session=hash(JSON.stringify([b.client,event.session_id]));
+function taskLocation(b,event,revision){
+  const session=hash(JSON.stringify([b.client,event.session_id]));
   const eventKey=hash(JSON.stringify([b.client,event.session_id,event.prompt_id]));
   const key=hash(JSON.stringify([revision,eventKey])),dir=join(b.profile,'plugin-state',b.key,'suggestions');
   const file=join(dir,'tasks',key+'.json'),latest=join(dir,'latest',session+'.json');
+  return {session,eventKey,key,dir,file,latest};
+}
+function cursorProjects(event){
+  if(!nativeId(event.conversation_id)||event.parent_conversation_id||event.subagent_id||event.agent_id)return;
+  const roots=event.workspace_roots??[];
+  if(!Array.isArray(roots)||roots.length>16)return;
+  const projects=[...new Set([...roots,...(event.cwd?[event.cwd]:[])])].sort();
+  if(projects.some(p=>typeof p!=='string'||!isAbsolute(p))||Buffer.byteLength(JSON.stringify(projects))>2048)return;
+  return projects;
+}
+function projectExcluded(config,session,projects){
+  return (projects.length?projects:[undefined]).some(path=>excluded(config,session,path));
+}
+// Cursor uses a semantic version on desktop and a dated build ID in the CLI.
+// Older hosts can return workspace context after a tool but discard it at submit.
+function cursorSubmitContext(version){
+  if(typeof version!=='string')return false;
+  const cli=/^(\d{4}\.\d{2}\.\d{2})-[a-f0-9]+$/.exec(version);
+  if(cli)return cli[1]>='2026.11.22';
+  const desktop=/^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  if(!desktop)return false;
+  const [,major,minor,patch]=desktop.map(Number);
+  return major>3||major===3&&(minor>18||minor===18&&patch>=9);
+}
+export async function notePrompt(b,event){
+  if(event.hook_event_name!=='UserPromptSubmit')return;
+  const selected=settings(b),cursor=b.client==='cursor';
+  const projects=cursor?cursorProjects(event):[event.cwd];
+  if(!selected||!projects||cursor&&event.nativeHookName!=='beforeSubmitPrompt'||event.agent_id||!nativeId(event.session_id)||!nativeId(event.prompt_id)||typeof event.prompt!=='string'||!event.prompt.trim()||projectExcluded(selected.c,event.session_id,projects))return;
+  const revision=selected.s.revision;
+  const {session,eventKey,key,dir,file,latest}=taskLocation(b,event,revision);
   return locked(join(dir,'admission.lock'),async()=>{
     const existing=readJson(file,32768,{missing:true});if(existing)return {...existing,file,latest,dir};
-    const before=readJson(latest,32768,{missing:true}),now=Date.now();
+    const previous=readJson(latest,32768,{missing:true}),now=Date.now();
+    const before=!cursor||previous?.revision===revision&&JSON.stringify(previous.projects)===JSON.stringify(projects)?previous:undefined;
     const tasks=join(dir,'tasks');let active=0;const retained=[];
     if(existsSync(tasks))for(const name of readdirSync(tasks).filter(n=>/^[a-f0-9]{64}\.json$/.test(n))){
       const path=join(tasks,name),old=readJson(path,32768);
@@ -87,13 +116,29 @@ export async function notePrompt(b,event){
     for(const old of retained.sort((a,b)=>b.created-a.created).slice(509))unlinkSync(old.path);
     const message=redact(event.prompt).slice(0,4000);
     const context=[...(before?.context??[]),...(before?.message?[{role:'user',text:before.message.slice(0,400)}]:[])].slice(-4);
-    const task={key,eventKey,session,revision,created:now,status:active<2?'observed':'skipped',input:{eventId:event.prompt_id,currentSession:{harness:b.client,sessionId:event.session_id},role:'user',message,task:before?.task??message.slice(0,1000),context,timestamp:new Date(now).toISOString()}};
-    atomic(file,task);atomic(latest,{key,created:now,message,task:task.input.task,context});
+    const scope=cursor?{revision,projects}:{};
+    const task={...scope,key,eventKey,session,revision,created:now,status:active<2?'observed':'skipped',input:{eventId:event.prompt_id,currentSession:{harness:b.client,sessionId:event.session_id},role:'user',message,task:before?.task??message.slice(0,1000),context,timestamp:new Date(now).toISOString()}};
+    atomic(file,task);atomic(latest,{...scope,key,created:now,message,task:task.input.task,context});
     return {...task,file,latest,dir};
   },500);
 }
+// Cursor can return context only after a tool. Use the prompt recorded by the
+// native submit hook for this exact generation, never the tool payload.
+function cursorToolTask(b,event){
+  if(!['postToolUse','postToolUseFailure'].includes(event.nativeHookName)||event.is_interrupt||!nativeId(event.prompt_id))return;
+  const projects=cursorProjects(event),selected=settings(b);
+  if(!projects||!selected||projectExcluded(selected.c,event.session_id,projects))return;
+  const location=taskLocation(b,event,selected.s.revision);
+  if(readJson(location.latest,32768,{missing:true})?.key!==location.key)return;
+  const task=readJson(location.file,32768,{missing:true});
+  if(!task||!['observed','skipped'].includes(task.status)||Date.now()-task.created>=120000||!Array.isArray(task.projects)||projectExcluded(selected.c,event.session_id,task.projects))return;
+  return {...task,...location};
+}
 export async function suggest(b,event){
-  const task=await notePrompt(b,event);if(!task)return;
+  const cursor=b.client==='cursor';
+  const submit=event.nativeHookName==='beforeSubmitPrompt';
+  const task=cursor&&!submit?cursorToolTask(b,event):await notePrompt(b,event);
+  if(!task||cursor&&submit&&!cursorSubmitContext(event.cursor_version))return;
   const {file:state,dir,revision}=task,outbox=join(dir,'events');
   let reports=[];
   const report=(stage,details={})=>{const e={id:randomUUID(),at:new Date().toISOString(),harness:b.client,eventKey:task.eventKey,sessionHash:task.session,stage,...details};reports.push(e);atomic(join(outbox,e.id+'.json'),e);};
@@ -104,7 +149,8 @@ export async function suggest(b,event){
       const stored=readJson(state,32768);
       if(!['observed','skipped'].includes(stored.status))return;
       if(stored.status==='skipped'){atomic(state,{...stored,status:'finished'});report('observed');report('skipped',{reason:'capacity'});return;}
-      const guard=()=>{const now=settings(b);if(privateSession(b,event.session_id)||!now||now.s.revision!==revision||excluded(now.c,event.session_id,event.cwd)||readJson(task.latest,32768)?.key!==task.key||Date.now()-task.created>=120000)throw Error('Context selection changed');};
+      const projects=b.client==='cursor'?[...task.projects,...cursorProjects(event)]:[event.cwd];
+      const guard=()=>{const now=settings(b);if(privateSession(b,event.session_id)||!now||now.s.revision!==revision||projectExcluded(now.c,event.session_id,projects)||readJson(task.latest,32768)?.key!==task.key||Date.now()-task.created>=120000)throw Error('Context selection changed');};
       guard();report('observed');
       phase='identity';await request(b,'/api/sessions/identity',{identity:true,refresh:true});guard();
       // Persist before the billable operation. An ambiguous failure is never
@@ -123,7 +169,7 @@ export async function suggest(b,event){
       if(Buffer.byteLength(text)>16000)throw Error('Context response exceeds output limit');
       return {output:{hookSpecificOutput:{hookEventName:'UserPromptSubmit',additionalContext:text}},guard,handoff:()=>{guard();atomic(state,{...stored,status:'delivered',checkId});report('handoff',{...(checkId?{checkId}:{}),results:results.length});}};
     },500);
-  }catch(error){report('dropped',{reason:'unavailable'});const prior=readJson(state,32768,{missing:true});if(prior)atomic(state,{...prior,status:'failed'});result={diagnostic:{phase,name:error.name,code:error.code??null,sqliteCode:error.errcode??null}};}
+  }catch(error){if(phase==='lock')return;report('dropped',{reason:'unavailable'});const prior=readJson(state,32768,{missing:true});if(prior)atomic(state,{...prior,status:'failed'});result={diagnostic:{phase,name:error.name,code:error.code??null,sqliteCode:error.errcode??null}};}
   return {...result,flush:async()=>{
     if(!existsSync(outbox)||!settings(b))return;
     const files=readdirSync(outbox).filter(n=>/^[a-f0-9-]+\.json$/.test(n));

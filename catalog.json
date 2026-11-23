@@ -6,35 +6,35 @@
       "harness": "claude-code",
       "name": "opencrawl",
       "path": "plugins/claude-code",
-      "version": "0.3.5",
+      "version": "0.3.6",
       "capabilities": "capabilities.json"
     },
     {
       "harness": "codex",
       "name": "opencrawl",
       "path": "plugins/codex",
-      "version": "0.3.5",
+      "version": "0.3.6",
       "capabilities": "capabilities.json"
     },
     {
       "harness": "cursor",
       "name": "opencrawl",
       "path": "plugins/cursor",
-      "version": "0.3.5",
+      "version": "0.3.6",
       "capabilities": "capabilities.json"
     },
     {
       "harness": "antigravity",
       "name": "opencrawl",
       "path": "plugins/antigravity",
-      "version": "0.3.5",
+      "version": "0.3.6",
       "capabilities": "capabilities.json"
     },
     {
       "harness": "devin",
       "name": "opencrawl",
       "path": "plugins/devin",
-      "version": "0.3.5",
+      "version": "0.3.6",
       "distribution": "repository"
     }
   ]
