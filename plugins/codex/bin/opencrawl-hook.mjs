@@ -1498,7 +1498,7 @@ async function confirmRead(b, file, event) {
   }, 150);
 }
 async function feedNotice(b, event, file, lane, { waiter, waitMs = 0, deadline = Infinity, withBounds = false, repeatPending = true } = {}) {
-  const eligible = (state) => state?.enabled && state.feeds && !state.closed && (waiter ? state.waiter === waiter : !state.waiter && (!state.generation || state.generation === event.generation_id));
+  const eligible = (state) => state?.enabled && state.feeds && (waiter ? state.waiter === waiter : !state.closed && !state.waiter && (!state.generation || state.generation === event.generation_id));
   const ready = (state) => eligible(state) && (lane === "direct" || state.feeds.routine.next <= Date.now());
   if (!ready(load(file)))
     return;
@@ -1806,7 +1806,7 @@ async function waitForMail(b, event, file, windowMs, { finalOnly = false, superv
     const current = load(file);
     if (!supervised && cursor && current?.generation && event.generation_id !== current.generation)
       return;
-    if (current?.enabled && (!supervised || current.feeds)) {
+    if (current?.enabled && (supervised ? current.feeds : !current.closed)) {
       const pending = current.feeds?.direct.pending;
       if (supervised && pending)
         pending.woken = previous?.after === pending.after && previous?.through === pending.through;
@@ -1815,7 +1815,7 @@ async function waitForMail(b, event, file, windowMs, { finalOnly = false, superv
           feed.ticket = null;
           feed.busyUntil = 0;
         }
-      atomic(file, { ...current, ...supervised ? { closed: false } : {}, waiter, ticket: null });
+      atomic(file, { ...current, waiter, ticket: null });
     }
   }, 150);
   try {

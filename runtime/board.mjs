@@ -207,8 +207,8 @@ async function confirmRead(b,file,event) {
 }
 
 async function feedNotice(b,event,file,lane,{waiter,waitMs=0,deadline=Infinity,withBounds=false,repeatPending=true}={}) {
-  const eligible = state => state?.enabled && state.feeds && !state.closed && (waiter ? state.waiter===waiter :
-    !state.waiter && (!state.generation || state.generation===event.generation_id));
+  const eligible = state => state?.enabled && state.feeds && (waiter ? state.waiter===waiter :
+    !state.closed && !state.waiter && (!state.generation || state.generation===event.generation_id));
   const ready = state => eligible(state) && (lane==='direct' || state.feeds.routine.next<=Date.now());
   if (!ready(load(file))) return;
   const claim=await locked(file+'.lock',()=>{
@@ -455,13 +455,15 @@ async function waitForMail(b,event,file,windowMs,{finalOnly=false,supervised=fal
   await locked(file + '.lock', () => {
     const current = load(file);
     if (!supervised && cursor && current?.generation && event.generation_id !== current.generation) return;
-    if (current?.enabled && (!supervised || current.feeds)) {
+    // SessionEnd releases the native wait. Only the owning launcher's wait
+    // may claim a closed session, without reopening it for delayed callbacks.
+    if (current?.enabled && (supervised ? current.feeds : !current.closed)) {
       const pending=current.feeds?.direct.pending;
       // A replacement launcher retries an interrupted wake. A live launcher
       // waits for new mail after it already dispatched this exact page.
       if (supervised && pending) pending.woken=previous?.after===pending.after && previous?.through===pending.through;
       if(current.feeds)for(const feed of Object.values(current.feeds)){feed.ticket=null;feed.busyUntil=0;}
-      atomic(file,{...current,...(supervised?{closed:false}:{}),waiter,ticket:null});
+      atomic(file,{...current,waiter,ticket:null});
     }
   }, 150);
 

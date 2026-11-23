@@ -105,4 +105,13 @@ test('packaged inbox offers one scoped page and checkpoints its confirmed read',
   }
   assert.equal(direct().pending,null);
   assert.equal(direct().after,8);
+  if(harness==='claude-code'||harness==='cursor'){
+    const cursor=harness==='cursor';
+    await invoke(cursor?'capture':'inbox',cursor?'sessionEnd':'SessionEnd');
+    assert.equal(JSON.parse(readFileSync(file)).closed,true);
+    const requests=f.received.filter(r=>r.path==='/api/board/v2/sync').length;
+    await invoke('inbox',cursor?'stop':'Stop',cursor?{status:'completed',loop_count:0}:{});
+    assert.equal(f.received.filter(r=>r.path==='/api/board/v2/sync').length,requests);
+    assert.equal(JSON.parse(readFileSync(file)).waiter,null);
+  }
 });

@@ -476,6 +476,11 @@ test('resuming a chat immediately reoffers the unconfirmed direct page', async t
   await f.start();
   const first = (await f.stop(500)).wake;
   await f.inbox('SessionEnd');
+  // A delayed native Stop must return immediately after the session ended.
+  const lateStop=f.stop(1500);
+  try {
+    assert.equal(await Promise.race([lateStop.then(()=>'returned'),delay(300).then(()=>'waiting')]),'returned');
+  } finally { await f.inbox('SessionEnd'); await lateStop; }
   await f.start();
   assert.equal((await f.stop(500)).wake, first);
 });
@@ -496,6 +501,7 @@ test('a saved job waits only for direct mail and retries an interrupted dispatch
   assert.equal(await wait(100), undefined);
   f.behavior.registration.boardDirect = true;
   await f.start();
+  await f.inbox('SessionEnd');
   const seen = [];
   f.behavior.sync = args => {
     seen.push(args);
@@ -504,6 +510,7 @@ test('a saved job waits only for direct mail and retries an interrupted dispatch
   };
   for (const ms of [-1, 0, 30 * 60_000 + 1]) assert.equal(await wait(ms), undefined);
   const offer = await wait(1500);
+  assert.equal(readJson(f.file).closed,true,'Waiting outside the native job must preserve SessionEnd');
   assert.equal(offer.after, 6);
   assert.equal(offer.through, 7);
   assert.match(offer.notice, /board_inbox/);
@@ -521,6 +528,7 @@ test('a replaced launcher cannot dispatch an older outstanding response', async 
   const f = await session(t,'codex'), id = f.event.session_id;
   f.behavior.registration.boardDirect = true;
   await f.start();
+  await f.inbox('SessionEnd');
   const started = Promise.withResolvers(), release = Promise.withResolvers();
   let requests = 0;
   f.behavior.sync = async () => {
@@ -533,6 +541,9 @@ test('a replaced launcher cannot dispatch an older outstanding response', async 
   const old = waitAfterExit(f.b,id,1500);
   await started.promise;
   try {
+    const owner=readJson(f.file).waiter;
+    assert.equal(await f.stop(100),undefined);
+    assert.equal(readJson(f.file).waiter,owner,'A delayed native Stop must leave the launcher in control');
     assert.equal((await waitAfterExit(f.b,id,1500)).through, 1);
   } finally { release.resolve(); }
   assert.equal(await old, undefined);
