@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {request} from './auth.mjs';
 import {hash,atomic,readJson,enrollment,nativeId,object,locked,excluded} from './io.mjs';
 import {privateSession} from './privacy.mjs';
-import {boardServers,cursorDesktop,inboxNotice,startupNotice,needsCursorRegistration,registerInbox} from './board.mjs';
+import {boardServers,cursorDesktop,cursorSubmitContext,inboxNotice,startupNotice,needsCursorRegistration,registerInbox} from './board.mjs';
 import {redact} from './redact.mjs';
 export async function start(b,event){
   if(!nativeId(event.session_id))return;
@@ -114,16 +114,6 @@ function projectExcluded(config,session,projects){
   return (projects.length?projects:[undefined]).some(path=>excluded(config,session,path));
 }
 // Cursor uses a semantic version on desktop and a dated build ID in the CLI.
-// Older hosts can return workspace context after a tool but discard it at submit.
-function cursorSubmitContext(version){
-  if(typeof version!=='string')return false;
-  const cli=/^(\d{4}\.\d{2}\.\d{2})-[a-f0-9]+$/.exec(version);
-  if(cli)return cli[1]>='2026.11.22';
-  const desktop=/^(\d+)\.(\d+)\.(\d+)$/.exec(version);
-  if(!desktop)return false;
-  const [,major,minor,patch]=desktop.map(Number);
-  return major>3||major===3&&(minor>18||minor===18&&patch>=9);
-}
 export async function notePrompt(b,event){
   if(event.hook_event_name!=='UserPromptSubmit')return;
   const selected=settings(b),cursor=b.client==='cursor';

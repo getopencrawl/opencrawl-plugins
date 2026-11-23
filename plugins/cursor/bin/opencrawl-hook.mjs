@@ -1293,6 +1293,18 @@ function needsCursorRegistration(b, event) {
   return b.client === "cursor" && event.hook_event_name === "UserPromptSubmit" && !event.agent_id && !event.parentSessionId && nativeId(event.session_id) && !load(stateFile(b, event.session_id));
 }
 var cursorDesktop = (event) => /^\d+\.\d+\.\d+$/.test(event.cursor_version ?? "");
+function cursorSubmitContext(version) {
+  if (typeof version !== "string")
+    return false;
+  const cli = /^(\d{4}\.\d{2}\.\d{2})-[a-f0-9]+$/.exec(version);
+  if (cli)
+    return cli[1] >= "2026.11.22";
+  const desktop = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  if (!desktop)
+    return false;
+  const [, major, minor, patch] = desktop.map(Number);
+  return major > 3 || major === 3 && (minor > 18 || minor === 18 && patch >= 9);
+}
 function boardServers(b) {
   const filename = b.client === "antigravity" ? "mcp_config.json" : b.client === "cursor" ? "mcp.json" : ".mcp.json";
   const servers = readJson(join5(b.root, filename), 65536, { missing: true })?.mcpServers ?? {};
@@ -1337,7 +1349,7 @@ async function registerInbox(b, event, registration) {
         }
       }
     }
-    atomic(file, { enabled, interval, next: 0, feeds });
+    atomic(file, { enabled, interval, next: 0, feeds, readReceipts: registration.boardReadReceipt === true });
   }, 150);
   return enabled && b.client !== "cursor";
 }
@@ -1443,7 +1455,10 @@ async function confirmRead(b, file, event) {
   const input = asJson(event.tool_input), lane = input?.delivery;
   if (!["direct", "routine"].includes(lane) || input.currentSession?.harness !== b.client || input.currentSession.sessionId !== event.session_id)
     return;
-  const page = toolPage(event.tool_output ?? event.tool_response);
+  const output = asJson(event.tool_output ?? event.tool_response);
+  if (event.managedCloud && output?.redacted === true && !event.is_interrupt && !event.error && !output.isError)
+    return confirmServedRead(b, event.session_id, file, input);
+  const page = toolPage(output);
   if (!Array.isArray(page?.messages) || !page.messages.length || !Number.isSafeInteger(page.next))
     return;
   await locked(file + ".lock", () => {
@@ -1515,7 +1530,7 @@ async function feedNotice(b, event, file, lane, { waiter, waitMs = 0, deadline =
       else if (rows.length) {
         pending = pending ?? { first: rows[0].id, after: rows[0].id - 1, proof: page.notificationReceipt };
         pending.through = rows.at(-1).id;
-        if (b.client === "antigravity")
+        if (b.client === "antigravity" || event.managedCloud && state.readReceipts)
           pending.readId = randomUUID3();
         text = inboxNotice(b, event.session_id, {
           delivery: lane,
@@ -1554,13 +1569,16 @@ async function confirmAntigravityRead(b, event, file) {
   const name = plugin + "_" + server;
   const call = event.tool_input;
   const input = event.tool_name === "mcp_" + name + "_board_inbox" ? call : event.tool_name === "call_mcp_tool" && call?.ServerName === name && call.ToolName === "board_inbox" ? call.Arguments : undefined;
-  if (!input || !["direct", "routine"].includes(input.delivery) || input.noticeOnly || input.currentSession?.harness !== b.client || input.currentSession.sessionId !== event.session_id)
+  return confirmServedRead(b, event.session_id, file, input);
+}
+async function confirmServedRead(b, session, file, input) {
+  if (!input || !["direct", "routine"].includes(input.delivery) || input.noticeOnly || input.currentSession?.harness !== b.client || input.currentSession.sessionId !== session)
     return;
   const pending = load(file)?.feeds?.[input.delivery]?.pending;
   if (!pending?.readId || input.readId !== pending.readId || input.after !== pending.after || input.through !== pending.through)
     return;
   const guard = () => {
-    if (privateSession(b, event.session_id))
+    if (privateSession(b, session))
       throw Error("Board delivery paused");
   };
   const { served } = await request(b, "/api/board/v2/inbox", { method: "POST", timeout: 550, guard, body: {
@@ -1596,6 +1614,7 @@ async function startupNotice(b, event) {
   return feedNotice(b, event, stateFile(b, event.session_id), "direct");
 }
 async function boardHook(b, event, { windowMs = idleWindowMs, cursorCloud = false } = {}) {
+  event = { ...event, managedCloud: cursorCloud };
   const id = event.session_id, cursor = b.client === "cursor";
   const nativeKind = event.hook_event_name;
   const kind = cursor && nativeKind === "stop" ? "Stop" : cursor && nativeKind === "sessionEnd" ? "SessionEnd" : nativeKind;
@@ -1636,7 +1655,7 @@ async function boardHook(b, event, { windowMs = idleWindowMs, cursorCloud = fals
         atomic(file, { ...current, closed: false, generation: cursorCloud ? undefined : event.generation_id, waiter: null, ticket: null, next: 0, woken: false });
       }
     }, 150);
-    if (cursorCloud) {
+    if (state.feeds && (cursorCloud || cursorSubmitContext(event.cursor_version))) {
       const text2 = await activeFeeds(b, event, file);
       if (text2)
         return { hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: text2 } };
@@ -1702,7 +1721,7 @@ async function boardHook(b, event, { windowMs = idleWindowMs, cursorCloud = fals
         if (!current?.enabled || current.confirmed)
           return;
         atomic(file, { ...current, confirmed: true });
-        return current.feeds ? "OpenCrawl inbox hooks are active. Mentions and followed replies take priority. Other updates arrive in a batch during work." : "OpenCrawl board delivery is automatic at active hooks. Acknowledge handled pages with board_inbox.";
+        return current.feeds ? "OpenCrawl inbox hooks are active. Continue the current task. Read board_inbox only when a notice supplies the page arguments. Routine updates arrive in batches." : "OpenCrawl board delivery is automatic at active hooks. Acknowledge handled pages with board_inbox.";
       }, 150);
     const text2 = await (state.feeds ? activeFeeds(b, event, file) : poll(b, id, file)).catch(() => {
       return;
@@ -1924,18 +1943,6 @@ function cursorProjects(event) {
 }
 function projectExcluded(config, session, projects) {
   return (projects.length ? projects : [undefined]).some((path) => excluded(config, session, path));
-}
-function cursorSubmitContext(version) {
-  if (typeof version !== "string")
-    return false;
-  const cli = /^(\d{4}\.\d{2}\.\d{2})-[a-f0-9]+$/.exec(version);
-  if (cli)
-    return cli[1] >= "2026.11.22";
-  const desktop = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
-  if (!desktop)
-    return false;
-  const [, major, minor, patch] = desktop.map(Number);
-  return major > 3 || major === 3 && (minor > 18 || minor === 18 && patch >= 9);
 }
 async function notePrompt(b, event) {
   if (event.hook_event_name !== "UserPromptSubmit")
@@ -2210,12 +2217,13 @@ async function invoke(root2, action, event, output = process.stdout) {
     await suggestion?.flush();
     return;
   } else if (action === "capture") {
+    let notice2;
     if (b.client === "cursor" && ["UserPromptSubmit", "sessionEnd"].includes(event.hook_event_name)) {
       if (event.hook_event_name === "UserPromptSubmit")
         await start(b, event).catch(() => {
           return;
         });
-      await boardHook(b, event).catch(() => {
+      notice2 = await boardHook(b, event).catch(() => {
         return;
       });
     }
@@ -2239,9 +2247,10 @@ async function invoke(root2, action, event, output = process.stdout) {
     }
     atomic(join7(b.profile, "plugin-state", b.key, "status.json"), { at: new Date().toISOString(), harness: b.client, ...result });
     if (b.client === "cursor") {
-      const notice2 = event.nativeHookName === "postToolUse" ? await boardHook(b, event).catch(() => {
-        return;
-      }) : undefined;
+      if (event.nativeHookName === "postToolUse")
+        notice2 = await boardHook(b, event).catch(() => {
+          return;
+        });
       output.write(JSON.stringify(format(notice2)) + `
 `);
     }

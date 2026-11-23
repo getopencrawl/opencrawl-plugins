@@ -528,3 +528,41 @@ test('Cursor Cloud accepts different native generations and checks only direct m
   assert.deepEqual(await cloud('stop','run-different-generation',{status:'completed',loop_count:1}),{});
   assert(calls.every(args=>args.delivery==='direct'&&!args.waitMs));
 });
+
+test('current Cursor submit forwards a bounded notice before the first tool', async t => {
+  const f=await fixture(t,'cursor'),id=f.event.session_id;
+  f.behavior.registration={session:id,workspace:f.b.owner.tenantId,agent:'c'.repeat(64),name:'receiver',boardProtocol:2,boardInbox:true,boardDirect:true};
+  f.behavior.sync=()=>({messages:[{id:6}],next:6,notificationReceipt:'f'.repeat(64)});
+  let out='';
+  await invoke(f.root,'capture',{hook_event_name:'beforeSubmitPrompt',conversation_id:id,generation_id:'turn',cursor_version:'2026.11.22-e9042b2'}, {write:x=>{out+=x;}});
+  assert.equal(JSON.parse(out).continue,true);
+  assert.match(JSON.parse(out).additional_context,/"through":6/);
+});
+
+test('a redacted Cloud tool result requires a matching server receipt for this exact read', async t => {
+  const f=await fixture(t,'cursor'),id=f.event.session_id,proof='e'.repeat(64);
+  f.behavior.registration={session:id,workspace:f.b.owner.tenantId,agent:'c'.repeat(64),name:'receiver',boardProtocol:2,boardInbox:true,boardDirect:true,boardReadReceipt:true};
+  f.behavior.sync=args=>({messages:(args.after??0)<5?[{id:5}]:[],next:5,notificationReceipt:proof});
+  const invokeCloud=async(name,fields={})=>{
+    let out='';
+    await invoke(f.root,'cloud-inbox',{hook_event_name:name,conversation_id:id,generation_id:name,cursor_version:'1.0.0',...fields},{write:x=>{out+=x;}});
+    return JSON.parse(out);
+  };
+  const offer=await invokeCloud('beforeSubmitPrompt');
+  const args=JSON.parse(offer.additional_context.match(/using (\{.*\})\./)[1]);
+  const state=()=>readJson(join(f.b.profile,'plugin-state',f.b.key,'board',hash(id)+'.json')).feeds.direct;
+  const completion={tool_name:'MCP:board_inbox',tool_input:args,tool_output:{redacted:true}};
+  const served={readId:args.readId,after:4,through:5,first:5,next:5,proof};
+  assert(args.readId);
+  for(const receipt of [null,{...served,proof:'wrong'}]){
+    f.behavior.page={served:receipt};
+    await invokeCloud('postToolUse',completion);
+    assert.equal(state().pending.readId,args.readId);
+  }
+  f.behavior.page={served};
+  await invokeCloud('postToolUse',{...completion,is_interrupt:true});
+  assert.equal(state().pending.readId,args.readId);
+  await invokeCloud('postToolUse',completion);
+  assert.equal(state().after,5);
+  assert.equal(state().pending,null);
+});

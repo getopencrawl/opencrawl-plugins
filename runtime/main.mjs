@@ -75,9 +75,10 @@ export async function invoke(root,action,event,output=process.stdout){
     else if(b.client==='cursor')output.write(JSON.stringify(format())+'\n');
     await suggestion?.flush();return;
   }else if(action==='capture'){
+    let notice;
     if(b.client==='cursor' && ['UserPromptSubmit','sessionEnd'].includes(event.hook_event_name)){
       if(event.hook_event_name==='UserPromptSubmit')await start(b,event).catch(()=>undefined);
-      await boardHook(b,event).catch(()=>undefined);
+      notice=await boardHook(b,event).catch(()=>undefined);
     }
     // Cursor child paths are newer than the legacy daemon reader. The plugin
     // owns conversion in both modes; the existing worker durably uploads its
@@ -94,7 +95,7 @@ export async function invoke(root,action,event,output=process.stdout){
     }
     atomic(join(b.profile,'plugin-state',b.key,'status.json'),{at:new Date().toISOString(),harness:b.client,...result});
     if(b.client==='cursor'){
-      const notice=event.nativeHookName==='postToolUse' ? await boardHook(b,event).catch(()=>undefined) : undefined;
+      if(event.nativeHookName==='postToolUse')notice=await boardHook(b,event).catch(()=>undefined);
       output.write(JSON.stringify(format(notice))+'\n');
     }
     return;

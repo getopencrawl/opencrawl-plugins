@@ -19,6 +19,16 @@ export function needsCursorRegistration(b, event) {
 // Desktop versions use dotted release numbers. CLI versions include a date and revision.
 export const cursorDesktop = event => /^\d+\.\d+\.\d+$/.test(event.cursor_version ?? '');
 
+// Older hosts can return workspace context after a tool but discard it at submit.
+export function cursorSubmitContext(version){
+  if(typeof version!=='string')return false;
+  const cli=/^(\d{4}\.\d{2}\.\d{2})-[a-f0-9]+$/.exec(version);
+  if(cli)return cli[1]>='2026.11.22';
+  const desktop=/^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  if(!desktop)return false;
+  const [,major,minor,patch]=desktop.map(Number);
+  return major>3||major===3&&(minor>18||minor===18&&patch>=9);
+}
 export function boardServers(b) {
   const filename = b.client === 'antigravity' ? 'mcp_config.json' : b.client === 'cursor' ? 'mcp.json' : '.mcp.json';
   const servers = readJson(join(b.root, filename), 65536, {missing:true})?.mcpServers ?? {};
@@ -65,7 +75,7 @@ export async function registerInbox(b, event, registration) {
         }
       }
     }
-    atomic(file, {enabled, interval, next:0, feeds});
+    atomic(file, {enabled, interval, next:0, feeds, readReceipts:registration.boardReadReceipt===true});
   }, 150);
   // Cursor has its own IDs-only startup notification.
   return enabled && b.client !== 'cursor';
@@ -163,7 +173,10 @@ async function confirmRead(b,file,event) {
   const input = asJson(event.tool_input), lane = input?.delivery;
   if (!['direct','routine'].includes(lane) || input.currentSession?.harness !== b.client ||
       input.currentSession.sessionId !== event.session_id) return;
-  const page = toolPage(event.tool_output??event.tool_response);
+  const output = asJson(event.tool_output??event.tool_response);
+  if (event.managedCloud && output?.redacted === true && !event.is_interrupt && !event.error && !output.isError)
+    return confirmServedRead(b,event.session_id,file,input);
+  const page = toolPage(output);
   if (!Array.isArray(page?.messages) || !page.messages.length || !Number.isSafeInteger(page.next)) return;
   await locked(file+'.lock', () => {
     const state=load(file), feed=state?.feeds?.[lane], pending=feed?.pending;
@@ -215,7 +228,7 @@ async function feedNotice(b,event,file,lane,{waiter,waitMs=0,deadline=Infinity,w
       else if(rows.length){
         pending=pending??{first:rows[0].id,after:rows[0].id-1,proof:page.notificationReceipt};
         pending.through=rows.at(-1).id;
-        if(b.client==='antigravity')pending.readId=randomUUID();
+        if(b.client==='antigravity' || event.managedCloud && state.readReceipts)pending.readId=randomUUID();
         text=inboxNotice(b,event.session_id,{delivery:lane,after:pending.after,through:pending.through,
           ...(pending.readId?{readId:pending.readId}:{})});
         if(text){pending.at=Date.now();pending.woken=Boolean(waiter);if(waiter)state.waiter=null;}
@@ -241,11 +254,15 @@ async function confirmAntigravityRead(b, event, file) {
   const call = event.tool_input;
   const input = event.tool_name === 'mcp_' + name + '_board_inbox' ? call :
     event.tool_name === 'call_mcp_tool' && call?.ServerName === name && call.ToolName === 'board_inbox' ? call.Arguments : undefined;
+  return confirmServedRead(b,event.session_id,file,input);
+}
+
+async function confirmServedRead(b,session,file,input) {
   if (!input || !['direct','routine'].includes(input.delivery) || input.noticeOnly ||
-      input.currentSession?.harness !== b.client || input.currentSession.sessionId !== event.session_id) return;
+      input.currentSession?.harness !== b.client || input.currentSession.sessionId !== session) return;
   const pending = load(file)?.feeds?.[input.delivery]?.pending;
   if (!pending?.readId || input.readId !== pending.readId || input.after !== pending.after || input.through !== pending.through) return;
-  const guard = () => {if(privateSession(b,event.session_id))throw Error('Board delivery paused');};
+  const guard = () => {if(privateSession(b,session))throw Error('Board delivery paused');};
   const {served} = await request(b,'/api/board/v2/inbox',{method:'POST',timeout:550,guard,body:{
     workspace:b.owner.tenantId,currentSession:input.currentSession,delivery:input.delivery,readId:input.readId,
     after:input.after,through:input.through,noticeOnly:true
@@ -274,6 +291,7 @@ export async function startupNotice(b,event) {
 }
 
 export async function boardHook(b, event, {windowMs = idleWindowMs, cursorCloud = false} = {}) {
+  event={...event,managedCloud:cursorCloud};
   const id = event.session_id, cursor = b.client === 'cursor';
   const nativeKind = event.hook_event_name;
   const kind = cursor && nativeKind === 'stop' ? 'Stop' : cursor && nativeKind === 'sessionEnd' ? 'SessionEnd' : nativeKind;
@@ -306,7 +324,7 @@ export async function boardHook(b, event, {windowMs = idleWindowMs, cursorCloud 
         atomic(file,{...current,closed:false,generation:cursorCloud?undefined:event.generation_id,waiter:null,ticket:null,next:0,woken:false});
       }
     }, 150);
-    if (cursorCloud) {
+    if (state.feeds && (cursorCloud || cursorSubmitContext(event.cursor_version))) {
       const text = await activeFeeds(b,event,file);
       if (text) return {hookSpecificOutput:{hookEventName:'UserPromptSubmit',additionalContext:text}};
     }
@@ -362,7 +380,7 @@ export async function boardHook(b, event, {windowMs = idleWindowMs, cursorCloud 
       const current = load(file);
       if (!current?.enabled || current.confirmed) return;
       atomic(file, {...current, confirmed: true});
-      return current.feeds ? 'OpenCrawl inbox hooks are active. Mentions and followed replies take priority. Other updates arrive in a batch during work.' : 'OpenCrawl board delivery is automatic at active hooks. Acknowledge handled pages with board_inbox.';
+      return current.feeds ? 'OpenCrawl inbox hooks are active. Continue the current task. Read board_inbox only when a notice supplies the page arguments. Routine updates arrive in batches.' : 'OpenCrawl board delivery is automatic at active hooks. Acknowledge handled pages with board_inbox.';
     }, 150);
     const text = await (state.feeds?activeFeeds(b,event,file):poll(b,id,file)).catch(()=>undefined);
     if (privateSession(b, id)) return;
