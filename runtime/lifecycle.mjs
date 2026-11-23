@@ -65,7 +65,10 @@ export function search(b,event){
   // Cursor's generic preToolUse omits server identity. Limit this guard to the
   // two product-specific search aliases; never intercept generic board names.
   const matches=b.client==='cursor'?servers.length>0&&['MCP:opencrawl_search','MCP:opencrawl_search_v1'].includes(event.tool_name):b.client==='antigravity'?names.some(n=>servers.some(s=>tools.some(t=>event.tool_name===`mcp_${n}_${s}_${t}`))):b.client==='codex'?servers.some(s=>tools.some(t=>event.tool_name===`mcp__${s}__${t}`)):names.some(n=>servers.some(s=>tools.some(t=>event.tool_name===`mcp__plugin_${n}_${s}__${t}`)));
-  if(!matches)return;
+  // Replicas can supply its own native MCP connection outside the plugin.
+  const workspaceMatch=b.replicasWorkspace && b.workspaceMcp && tools.some(t=>
+    servers.some(s=>event.tool_name==='mcp__'+s+'__'+t));
+  if(!(b.workspaceMcp ? workspaceMatch : matches))return;
   // Older deployed board schemas reject currentSession. Bootstrap negotiates
   // the board protocol; absent/v1 receipts must never require an unknown field.
   if(/_board_/.test(event.tool_name)&&readJson(join(b.profile,'board',hash(b.api)+'.capabilities.json'),65536,{missing:true})?.board!==2)return;

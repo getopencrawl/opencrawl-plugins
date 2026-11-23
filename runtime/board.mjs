@@ -30,6 +30,7 @@ export function cursorSubmitContext(version){
   return major>3||major===3&&(minor>18||minor===18&&patch>=9);
 }
 export function boardServers(b) {
+  if (b.replicasWorkspace && b.workspaceMcp) return [b.workspaceMcp.name];
   const filename = b.client === 'antigravity' ? 'mcp_config.json' : b.client === 'cursor' ? 'mcp.json' : '.mcp.json';
   const servers = readJson(join(b.root, filename), 65536, {missing:true})?.mcpServers ?? {};
   const registrationArgs = ['mcp','--api',b.api,'--installation-id',b.installationId,'--registration',b.owner.userId];
@@ -297,7 +298,7 @@ export async function startupNotice(b,event) {
   return feedNotice(b,event,stateFile(b,event.session_id),'direct');
 }
 
-export async function boardHook(b, event, {windowMs = idleWindowMs, cursorCloud = false} = {}) {
+export async function boardHook(b, event, {windowMs = (b.boardIdleMinutes ?? 30) * 60_000, cursorCloud = false} = {}) {
   event={...event,managedCloud:cursorCloud};
   const id = event.session_id, cursor = b.client === 'cursor';
   const nativeKind = event.hook_event_name;
@@ -413,9 +414,9 @@ export async function boardHook(b, event, {windowMs = idleWindowMs, cursorCloud 
     if (reason) return {decision: 'block', reason};
     return;
   }
-  const finalOnly = b.client === 'codex' || cursorCloud;
-  const text = await waitForMail(b,event,file,windowMs,{finalOnly});
-  if (text) return cursor ? {followup_message:state.feeds?'Follow the user’s current instructions, including requests to defer board mail. '+text:text} : finalOnly ? {decision:'block',reason:text} : {wake:text};
+  const finalOnly = b.client === 'codex' || cursorCloud || windowMs === 0;
+  const text = await waitForMail(b,event,file,finalOnly ? 2500 : windowMs,{finalOnly});
+  if (text) return cursor ? {followup_message:state.feeds?'Follow the user’s current instructions, including requests to defer board mail. '+text:text} : b.client === 'codex' ? {decision:'block',reason:text} : {wake:text};
 }
 
 // Owning launchers may wait after a saved native job exits. The same local
@@ -461,7 +462,7 @@ async function waitForMail(b,event,file,windowMs,{finalOnly=false,supervised=fal
           if (text || finalOnly) return text;
           continue;
         }
-        text=await poll(b,id,file,{waiter,deadline});
+        text=await poll(b,id,file,{waiter,deadline,final:finalOnly});
       }
       catch (error) {
         // A temporary outage can outlive one request. Retry inside the existing
@@ -474,9 +475,9 @@ async function waitForMail(b,event,file,windowMs,{finalOnly=false,supervised=fal
         }
         // Unnamed sessions cannot read an inbox. Never hold an editor turn open
         // when the board is unreachable or the current chat cannot participate.
-        if (cursor || state.feeds) return;
+        if (finalOnly || cursor || state.feeds) return;
       }
-      if (text) return text;
+      if (text || finalOnly) return text;
       state = load(file);
       if (state?.waiter !== waiter) return;
       const next = state.next - Date.now();

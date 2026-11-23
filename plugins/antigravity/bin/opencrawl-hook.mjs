@@ -397,6 +397,10 @@ function binding(root2) {
     throw Error("Origin must be normalized");
   const profile = join3(b.configHome, "opencrawl"), capture = join3(profile, "capture");
   const replicasWorkspace = /^workload_replicas_[a-f0-9]{64}$/.test(b.owner.userId);
+  if (b.boardIdleMinutes !== undefined && (!Number.isInteger(b.boardIdleMinutes) || b.boardIdleMinutes < 0 || b.boardIdleMinutes > 30))
+    throw Error("Invalid board idle window");
+  if (b.workspaceMcp !== undefined && (!replicasWorkspace || !["claude-code", "codex"].includes(b.client) || !object(b.workspaceMcp) || typeof b.workspaceMcp.name !== "string" || !/^[a-zA-Z0-9_-]{1,80}$/.test(b.workspaceMcp.name) || b.workspaceMcp.url !== b.api + "/mcp"))
+    throw Error("Invalid Replicas workspace MCP binding");
   const keyParts = [b.api, b.installationId, b.owner, b.client];
   if (replicasWorkspace)
     keyParts.push("replicas-workspace");
@@ -404,7 +408,7 @@ function binding(root2) {
 }
 function enrollment(b) {
   const current = binding(b.root);
-  if (current.key !== b.key || current.configHome !== b.configHome || current.captureMode !== b.captureMode)
+  if (current.key !== b.key || current.configHome !== b.configHome || current.captureMode !== b.captureMode || current.workspaceMcp?.name !== b.workspaceMcp?.name || current.boardIdleMinutes !== b.boardIdleMinutes)
     throw Error("Plugin binding changed");
   const c = readJson(join3(b.capture, "config.json"), 65536, { privateFile: true });
   if (c.schemaVersion !== 1 || c.authPending || c.api !== b.api || c.installationId !== b.installationId || c.owner?.tenantId !== b.owner.tenantId || c.owner?.userId !== b.owner.userId)
@@ -1306,6 +1310,8 @@ function cursorSubmitContext(version) {
   return major > 3 || major === 3 && (minor > 18 || minor === 18 && patch >= 9);
 }
 function boardServers(b) {
+  if (b.replicasWorkspace && b.workspaceMcp)
+    return [b.workspaceMcp.name];
   const filename = b.client === "antigravity" ? "mcp_config.json" : b.client === "cursor" ? "mcp.json" : ".mcp.json";
   const servers = readJson(join5(b.root, filename), 65536, { missing: true })?.mcpServers ?? {};
   const registrationArgs = ["mcp", "--api", b.api, "--installation-id", b.installationId, "--registration", b.owner.userId];
@@ -1625,7 +1631,7 @@ async function activeFeeds(b, event, file) {
 async function startupNotice(b, event) {
   return feedNotice(b, event, stateFile(b, event.session_id), "direct");
 }
-async function boardHook(b, event, { windowMs = idleWindowMs, cursorCloud = false } = {}) {
+async function boardHook(b, event, { windowMs = (b.boardIdleMinutes ?? 30) * 60000, cursorCloud = false } = {}) {
   event = { ...event, managedCloud: cursorCloud };
   const id = event.session_id, cursor = b.client === "cursor";
   const nativeKind = event.hook_event_name;
@@ -1761,10 +1767,10 @@ async function boardHook(b, event, { windowMs = idleWindowMs, cursorCloud = fals
       return { decision: "block", reason };
     return;
   }
-  const finalOnly = b.client === "codex" || cursorCloud;
-  const text = await waitForMail(b, event, file, windowMs, { finalOnly });
+  const finalOnly = b.client === "codex" || cursorCloud || windowMs === 0;
+  const text = await waitForMail(b, event, file, finalOnly ? 2500 : windowMs, { finalOnly });
   if (text)
-    return cursor ? { followup_message: state.feeds ? "Follow the user’s current instructions, including requests to defer board mail. " + text : text } : finalOnly ? { decision: "block", reason: text } : { wake: text };
+    return cursor ? { followup_message: state.feeds ? "Follow the user’s current instructions, including requests to defer board mail. " + text : text } : b.client === "codex" ? { decision: "block", reason: text } : { wake: text };
 }
 async function waitAfterExit(b, id, windowMs, previous) {
   if (!["cursor", "codex", "antigravity"].includes(b.client) || !nativeId(id) || !Number.isSafeInteger(windowMs) || windowMs <= 0 || windowMs > idleWindowMs || privateSession(b, id))
@@ -1810,16 +1816,16 @@ async function waitForMail(b, event, file, windowMs, { finalOnly = false, superv
             return text;
           continue;
         }
-        text = await poll(b, id, file, { waiter, deadline });
+        text = await poll(b, id, file, { waiter, deadline, final: finalOnly });
       } catch (error) {
         if (state.feeds && !finalOnly && (error.name === "TimeoutError" || error.name === "TypeError" || error.status === 429 || error.status >= 500 || error.code === "ConnectionRefused")) {
           await sleep(Math.max(0, Math.min(state.interval, deadline - Date.now())));
           continue;
         }
-        if (cursor || state.feeds)
+        if (finalOnly || cursor || state.feeds)
           return;
       }
-      if (text)
+      if (text || finalOnly)
         return text;
       state = load(file);
       if (state?.waiter !== waiter)
@@ -1909,7 +1915,8 @@ function search(b, event) {
     event = { ...event, tool_name: "mcp_" + input.ServerName + "_" + input.ToolName, tool_input: input.Arguments };
   }
   const matches = b.client === "cursor" ? servers.length > 0 && ["MCP:opencrawl_search", "MCP:opencrawl_search_v1"].includes(event.tool_name) : b.client === "antigravity" ? names2.some((n) => servers.some((s) => tools.some((t) => event.tool_name === `mcp_${n}_${s}_${t}`))) : b.client === "codex" ? servers.some((s) => tools.some((t) => event.tool_name === `mcp__${s}__${t}`)) : names2.some((n) => servers.some((s) => tools.some((t) => event.tool_name === `mcp__plugin_${n}_${s}__${t}`)));
-  if (!matches)
+  const workspaceMatch = b.replicasWorkspace && b.workspaceMcp && tools.some((t) => servers.some((s) => event.tool_name === "mcp__" + s + "__" + t));
+  if (!(b.workspaceMcp ? workspaceMatch : matches))
     return;
   if (/_board_/.test(event.tool_name) && readJson(join6(b.profile, "board", hash(b.api) + ".capabilities.json"), 65536, { missing: true })?.board !== 2)
     return;

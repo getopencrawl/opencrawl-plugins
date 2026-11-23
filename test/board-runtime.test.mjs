@@ -5,7 +5,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {fixture} from './fixture.mjs';
 import {invoke} from '../runtime/main.mjs';
 import {boardHook,waitAfterExit} from '../runtime/board.mjs';
-import {atomic,hash,readJson} from '../runtime/io.mjs';
+import {atomic,binding,hash,readJson} from '../runtime/io.mjs';
 import {markPrivate} from '../runtime/privacy.mjs';
 
 const page = {cursor: 'c'.repeat(64), more: false, messages: [{id: 9, text: 'Fixture mail'}]};
@@ -135,6 +135,21 @@ test('Claude drops a late fetch on session end, can resume and wakes only once p
   f.set({next: 0});
   assert.equal(await f.stop(80), undefined);
   assert(f.requests().every(r => !('acknowledge' in r.body)));
+});
+
+test('zero idle minutes performs one final Claude check and preserves the native wake response',async t=>{
+  const f=await session(t),file=join(f.root,'.opencrawl-binding.json'),original=readJson(file);
+  for(const value of [-1,31,'0',0.5]){
+    atomic(file,{...original,boardIdleMinutes:value});
+    assert.throws(()=>binding(f.root),/idle window/);
+  }
+  atomic(file,{...original,boardIdleMinutes:0});
+  const b=binding(f.root),stop=()=>boardHook(b,{...f.event,hook_event_name:'Stop'});
+  assert.equal(await stop(),undefined);
+  assert.equal(f.requests().length,1);
+  f.behavior.page=page;
+  assert.match((await stop()).wake,/Fixture mail/);
+  assert.equal(f.requests().length,2);
 });
 
 test('idle expiry and unavailable board leave pending mail available for the next active step', async t => {
