@@ -22,7 +22,7 @@ test('catalog, marketplace and installed package agree for every harness', () =>
   assert.equal(catalog.bindingSchemaVersion, 1);
   assert.equal(new Set(catalog.packages.map(p => p.version)).size, 1);
   const skills = new Map();
-  const skillNames = ['oc-continue','oc-import-memories','oc-incognito','oc-private','oc-readonly','opencrawl','opencrawl-private'];
+  const skillNames = ['oc-continue','oc-share','oc-import-memories','oc-incognito','oc-private','oc-readonly','opencrawl','opencrawl-private'];
   for (const {harness, name, path, version, capabilities} of catalog.packages) {
     if (harness === 'devin') {
       assert.equal(path, 'plugins/devin');
