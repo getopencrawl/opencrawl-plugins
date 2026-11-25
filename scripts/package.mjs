@@ -39,7 +39,7 @@ try{
 }finally{rmSync(runtimeZip,{force:true});rmSync(runtimeDir,{recursive:true,force:true});}
 const source=['auth.mjs','capture.mjs','io.mjs','lifecycle.mjs','main.mjs','privacy.mjs','redact.mjs','THIRD_PARTY_NOTICES.txt'];
 const manifestPath=(harness==='cursor'?'.cursor-plugin':harness==='antigravity'?'.antigravity-plugin':harness==='codex'?'.codex-plugin':'.claude-plugin')+'/plugin.json';
-const skills=['oc-continue','oc-import-memories','opencrawl'];
+const skills=['oc-continue','oc-share','oc-import-memories','opencrawl'];
 const privateSkills=['oc-incognito','oc-private','opencrawl-private','oc-readonly'];
 const base=[manifestPath,'assets/icon.svg','.mcp.json','mcp.json',...(harness==='antigravity'?['mcp_config.json']:[]),'LICENSE','README.md','capabilities.json',
   ...[...skills,...privateSkills].map(skill=>'skills/'+skill+'/SKILL.md'),

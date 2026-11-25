@@ -15,7 +15,7 @@ test('Devin installs CLI, skills and member-scoped hosted MCP from one directory
     url: 'https://app.getopencrawl.com/mcp', tokenScope: 'user',
   });
   assert.match(version, /^\d+\.\d+\.\d+$/);
-  for (const skill of ['opencrawl', 'oc-continue', 'oc-import-memories']) {
+  for (const skill of ['opencrawl', 'oc-continue', 'oc-share', 'oc-import-memories']) {
     assert.ok(readFileSync(join(plugin, 'skills', skill, 'SKILL.md'), 'utf8').includes('name: ' + skill));
   }
 });
