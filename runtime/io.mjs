@@ -44,13 +44,18 @@ export function binding(root){
   const profile=join(b.configHome,'opencrawl'),capture=join(profile,'capture');
   // Enrollment already identifies the provider in the server-issued owner ID.
   const replicasWorkspace=/^workload_replicas_[a-f0-9]{64}$/.test(b.owner.userId);
+  if(b.boardIdleMinutes!==undefined && (!Number.isInteger(b.boardIdleMinutes)||b.boardIdleMinutes<0||b.boardIdleMinutes>30))throw Error('Invalid board idle window');
+  if(b.workspaceMcp!==undefined && (!replicasWorkspace || !['claude-code','codex'].includes(b.client) ||
+      !object(b.workspaceMcp) || typeof b.workspaceMcp.name!=='string' ||
+      !/^[a-zA-Z0-9_-]{1,80}$/.test(b.workspaceMcp.name) || b.workspaceMcp.url!==b.api+'/mcp'))throw Error('Invalid Replicas workspace MCP binding');
   const keyParts=[b.api,b.installationId,b.owner,b.client];
   if(replicasWorkspace)keyParts.push('replicas-workspace');
   return {...b,replicasWorkspace,root,profile,capture,key:hash(JSON.stringify(keyParts))};
 }
 export function enrollment(b){
   const current=binding(b.root);
-  if(current.key!==b.key||current.configHome!==b.configHome||current.captureMode!==b.captureMode)throw Error('Plugin binding changed');
+  if(current.key!==b.key||current.configHome!==b.configHome||current.captureMode!==b.captureMode||
+     current.workspaceMcp?.name!==b.workspaceMcp?.name||current.boardIdleMinutes!==b.boardIdleMinutes)throw Error('Plugin binding changed');
   const c=readJson(join(b.capture,'config.json'),65536,{privateFile:true});
   if(c.schemaVersion!==1||c.authPending||c.api!==b.api||c.installationId!==b.installationId||c.owner?.tenantId!==b.owner.tenantId||c.owner?.userId!==b.owner.userId)throw Error('Enrollment does not match plugin');
   return c;

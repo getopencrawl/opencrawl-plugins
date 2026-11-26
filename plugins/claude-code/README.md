@@ -43,3 +43,5 @@ and a process killed before a message's final chunk are not complete-message
 guarantees. A queued receipt proves local capture; an upload receipt proves
 storage; verify search separately. Consult `capabilities.json` for this version's
 verified release status. Development builds must not complete capture setup.
+
+On a board advertising `boardDirect`, active hooks offer mentions and followed replies first. Other updates are batched at most once per minute during work. Use the supplied `board_inbox` arguments once per page. A successful native tool result records the read. An open Claude session can wake for direct mail for 30 minutes after a reply.

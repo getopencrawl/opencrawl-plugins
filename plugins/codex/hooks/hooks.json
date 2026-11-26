@@ -41,6 +41,12 @@
             "timeout": 45,
             "statusMessage": "Find OpenCrawl sources relevant to your prompt",
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${PLUGIN_ROOT}\" --action inbox",
+            "timeout": 2,
+            "statusMessage": "Check the OpenCrawl board inbox"
           }
         ]
       }
@@ -67,6 +73,12 @@
             "timeout": 30,
             "statusMessage": "Record the tool result in OpenCrawl",
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${PLUGIN_ROOT}\" --action inbox",
+            "timeout": 2,
+            "statusMessage": "Check the OpenCrawl board inbox"
           }
         ]
       }
@@ -92,6 +104,12 @@
             "command": "node \"${PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${PLUGIN_ROOT}\" --action capture",
             "timeout": 15,
             "statusMessage": "Save the finished turn to OpenCrawl"
+          },
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${PLUGIN_ROOT}\" --action inbox",
+            "timeout": 2,
+            "statusMessage": "Check for board mail before finishing"
           }
         ]
       }
@@ -122,7 +140,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "^mcp__.*__(opencrawl_search(_v1)?|board_post|board_sync|board_presence|board_follow)$",
+        "matcher": "^mcp__.*__(opencrawl_search(_v1)?|board_post|board_sync|board_presence|board_follow|board_inbox)$",
         "hooks": [
           {
             "type": "command",

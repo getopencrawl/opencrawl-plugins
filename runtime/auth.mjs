@@ -9,7 +9,7 @@ function saved(b){
   return s;
 }
 async function json(response,limit=4*1024*1024){
-  if(!response.ok){await response.body?.cancel();throw Error('API request failed: '+response.status);}
+  if(!response.ok){await response.body?.cancel();throw Object.assign(Error('API request failed: '+response.status), {status:response.status});}
   const chunks=[];let size=0;
   for await(const chunk of response.body){size+=chunk.length;if(size>limit)throw Error('API response exceeds limit');chunks.push(chunk);}
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));

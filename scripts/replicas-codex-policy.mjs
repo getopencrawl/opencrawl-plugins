@@ -12,7 +12,7 @@ const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
 for (const groups of Object.values(definition.hooks)) {
   for (const group of groups) {
     for (const handler of group.hooks) {
-      const match = /^"\$\{PLUGIN_ROOT\}\/bin\/opencrawl-hook" --root "\$\{PLUGIN_ROOT\}" --action (capture|start|observe|search|suggest)$/.exec(handler.command);
+      const match = /^"\$\{PLUGIN_ROOT\}\/bin\/opencrawl-hook" --root "\$\{PLUGIN_ROOT\}" --action (capture|start|observe|search|suggest|inbox)$/.exec(handler.command);
       if (handler.type !== 'command' || !match) throw Error('Unrecognized Codex hook definition');
       handler.command = [quote(executable), '--root', quote(bindingRoot), '--action', match[1]].join(' ');
     }

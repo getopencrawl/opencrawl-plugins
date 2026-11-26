@@ -1,8 +1,9 @@
-import {lstatSync} from 'node:fs';
+import {lstatSync,realpathSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {binding,enrollment,recording,atomic,nativeId} from './io.mjs';
 import {collect,handoff,handoffCodex,flush,observe,antigravityPrompt} from './capture.mjs';
+import {boardHook,waitAfterExit} from './board.mjs';
 import {start,search,suggest,notePrompt} from './lifecycle.mjs';
 import {invoked,sessionIdentity,privateSession,markPrivate,retryErasure,boardSend} from './privacy.mjs';
 export async function invoke(root,action,event,output=process.stdout){
@@ -10,6 +11,11 @@ export async function invoke(root,action,event,output=process.stdout){
   if(!lstatSync(join(root,'.opencrawl-binding.json'),{throwIfNoEntry:false}))return;
   const b=binding(root);enrollment(b);
   if(!event||typeof event!=='object'||Array.isArray(event))throw Error('Invalid hook input');
+  if(action==='wait'){
+    const offer=await waitAfterExit(b,event.sessionId,event.windowMs,event.previous);
+    if(offer)output.write(JSON.stringify(offer)+'\n');
+    return;
+  }
   if(b.client==='codex'&&event.hook_event_name==='UserPromptSubmit')event={...event,prompt_id:event.turn_id};
   if(b.client==='cursor'){
     const names={sessionStart:'SessionStart',beforeSubmitPrompt:'UserPromptSubmit',preToolUse:'PreToolUse'};
@@ -45,6 +51,20 @@ export async function invoke(root,action,event,output=process.stdout){
     return;
   }
   if(action==='privacy')return;
+  if(action==='cloud-inbox'){
+    if(b.client!=='cursor')return;
+    if(event.hook_event_name==='UserPromptSubmit')await start(b,event).catch(()=>undefined);
+    const notice=await boardHook(b,event,{cursorCloud:true}).catch(()=>undefined);
+    output.write(JSON.stringify(event.nativeHookName==='stop'?notice??{}:format(notice))+'\n');
+    return;
+  }
+  if(action==='inbox'){
+    // Board availability cannot block a tool, prompt, or normal stop.
+    const notice=await boardHook(b,event).catch(()=>undefined);
+    if(notice?.wake){process.stderr.write(notice.wake+'\n');return 2;}
+    if(notice||b.client==='cursor')output.write(JSON.stringify(notice??{})+'\n');
+    return;
+  }
   let result;
   if(action==='observe'){if(!['antigravity','cursor'].includes(b.client))await observe(b,event);await notePrompt(b,event);if(b.client==='cursor')output.write(JSON.stringify(format())+'\n');return;}
   else if(action==='start')result=await start(b,event);
@@ -55,6 +75,11 @@ export async function invoke(root,action,event,output=process.stdout){
     else if(b.client==='cursor')output.write(JSON.stringify(format())+'\n');
     await suggestion?.flush();return;
   }else if(action==='capture'){
+    let notice;
+    if(b.client==='cursor' && ['UserPromptSubmit','sessionEnd'].includes(event.hook_event_name)){
+      if(event.hook_event_name==='UserPromptSubmit')await start(b,event).catch(()=>undefined);
+      notice=await boardHook(b,event).catch(()=>undefined);
+    }
     // Cursor child paths are newer than the legacy daemon reader. The plugin
     // owns conversion in both modes; the existing worker durably uploads its
     // compatible immutable queue without a second callback conversion.
@@ -68,11 +93,26 @@ export async function invoke(root,action,event,output=process.stdout){
         try{result.uploaded=await flush(b);}catch{result.pendingUpload=true;}
       }
     }
-    atomic(join(b.profile,'plugin-state',b.key,'status.json'),{at:new Date().toISOString(),harness:b.client,...result});if(b.client==='cursor')output.write(JSON.stringify(format())+'\n');return;
+    atomic(join(b.profile,'plugin-state',b.key,'status.json'),{at:new Date().toISOString(),harness:b.client,...result});
+    if(b.client==='cursor'){
+      if(event.nativeHookName==='postToolUse')notice=await boardHook(b,event).catch(()=>undefined);
+      output.write(JSON.stringify(format(notice))+'\n');
+    }
+    return;
   }else throw Error('Unsupported lifecycle action');
   if(result||['antigravity','cursor'].includes(b.client)&&action==='search')output.write(JSON.stringify(format(result))+'\n');
 }
-if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]||process.versions.bun&&import.meta.main){
+function isEntryPoint() {
+  if (process.versions.bun && import.meta.main) return true;
+  const entry = process.argv[1];
+  if (!entry) return false;
+  const modulePath = fileURLToPath(import.meta.url);
+  if (entry === modulePath) return true;
+  // Node resolves the module URL, while hosts may launch it through a symlink.
+  try { return realpathSync(entry) === modulePath; } catch { return false; }
+}
+
+if(isEntryPoint()){
   const args=process.argv.slice(2);
   try{
     if(args.length!==4||args[0]!=='--root'||args[2]!=='--action')throw Error('Explicit root and action required');
@@ -80,7 +120,7 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]||process.ve
     let bytes=Buffer.alloc(0);
     const timer=setTimeout(()=>{process.stderr.write('OpenCrawl hook input timed out\n');process.exit(0);},1000);timer.unref();
     for await(const chunk of process.stdin){bytes=Buffer.concat([bytes,Buffer.from(chunk)]);if(bytes.length>8*1024*1024)throw Error('Hook input exceeds limit');}
-    clearTimeout(timer);await invoke(root,action,JSON.parse(bytes.toString('utf8')));
+    clearTimeout(timer);process.exitCode=await invoke(root,action,JSON.parse(bytes.toString('utf8')))??0;
   }catch(error){
     // Report only an error class, never a response body, credential or content.
     process.stderr.write('OpenCrawl lifecycle hook unavailable: '+(error?.name??'Error')+'\n');process.exitCode=args[3]==='search'?1:0;

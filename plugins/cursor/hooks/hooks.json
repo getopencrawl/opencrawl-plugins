@@ -87,6 +87,13 @@
         "type": "command",
         "timeout": 15,
         "failClosed": false
+      },
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/bin/opencrawl-hook.mjs\" --root \"${CURSOR_PLUGIN_ROOT}\" --action inbox",
+        "type": "command",
+        "timeout": 1810,
+        "failClosed": false,
+        "loop_limit": 1
       }
     ],
     "sessionEnd": [

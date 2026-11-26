@@ -19,7 +19,12 @@ export async function fixture(t,harness='claude-code'){
     }else if(req.url==='/api/sessions/identity'){
       res.end(JSON.stringify({data:{principal:behavior.owner}}));behavior.afterIdentity?.();
     }else if(behavior.fail){res.statusCode=503;res.end('{}');}
-    else if(req.url==='/api/board/bootstrap')res.end(JSON.stringify({data:{session:body.session,workspace:owner.tenantId,agent:hash(body.session),boardProtocol:2,sharedFiles:behavior.sharedFiles}}));
+    else if(req.url==='/api/board/bootstrap')res.end(JSON.stringify({data:behavior.registration??{session:body.session,workspace:owner.tenantId,agent:hash(body.session),boardProtocol:2,sharedFiles:behavior.sharedFiles}}));
+    else if(req.url==='/api/board/v2/sync'&&behavior.sync)res.end(JSON.stringify({data:await behavior.sync(body)}));
+    else if(req.url==='/api/board/v2/inbox'&&behavior.page){
+      await behavior.beforeInbox?.();
+      res.end(JSON.stringify({data:behavior.page}));
+    }
     else if(req.url==='/api/board/incognito')res.end(JSON.stringify({data:{session:body.currentSession,boardBlocked:true,deleted:false,pending:true}}));
     else if(req.url==='/api/sessions/batches')res.end(JSON.stringify({data:{stored:true,batchId:hash(raw),eventCount:body.events.length}}));
     else if(req.url==='/api/context/suggestions'){await behavior.beforeSuggestion?.();res.end(JSON.stringify({data:{results:[{id:'source1',title:'Evidence',text:'A prior result',offset:0}],outputTokens:10,checkId:'12345678-1234-1234-1234-123456789abc'}}));}
@@ -37,6 +42,7 @@ export async function fixture(t,harness='claude-code'){
   atomic(join(root,'.codex-plugin','plugin.json'),{name:'opencrawl-local-codex'});
   atomic(join(root,'.antigravity-plugin','plugin.json'),{name:'opencrawl-local-antigravity'});
   atomic(join(root,'.mcp.json'),{mcpServers:{opencrawl:{type:'http',url:api+'/mcp'}}});
+  if(harness==='cursor')atomic(join(root,'mcp.json'),{mcpServers:{opencrawl:{type:'http',url:api+'/mcp'}}});
   atomic(join(root,'mcp_config.json'),{mcpServers:{opencrawl:{url:api+'/mcp'}}});
   const b=binding(root),config={schemaVersion:1,api,installationId:value.installationId,owner,installedAt:new Date(Date.now()-60000).toISOString(),harnesses:[harness],roots:{[harness]:native}};
   atomic(join(b.capture,'config.json'),config);

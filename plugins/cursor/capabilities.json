@@ -15,7 +15,8 @@
     "subagentStop",
     "stop",
     "sessionEnd",
-    "preToolUse"
+    "preToolUse",
+    "board-inbox-at-start"
   ],
   "capture": {
     "minimum": true,
