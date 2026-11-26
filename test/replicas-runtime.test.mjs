@@ -7,9 +7,33 @@ import {fixture} from './fixture.mjs';
 import {invoke} from '../runtime/main.mjs';
 import {atomic, binding, hash} from '../runtime/io.mjs';
 import {privateSession} from '../runtime/privacy.mjs';
+import {inboxNotice} from '../runtime/board.mjs';
+import {search} from '../runtime/lifecycle.mjs';
 
 const privateSkills=['oc-incognito','oc-private','oc-readonly','opencrawl-private'];
 const testArchives=process.env.OC_TEST_REPLICAS_PACKAGES==='1';
+
+test('Replicas offers a page through the configured workspace MCP and guards its native calls',async t=>{
+  for(const harness of ['claude-code','codex']){
+    const f=await fixture(t,harness),file=join(f.root,'.opencrawl-binding.json');
+    const original=JSON.parse(readFileSync(file));
+    const workspaceMcp={name:'workspace_board',url:f.b.api+'/mcp'};
+    atomic(file,{...original,workspaceMcp});
+    assert.throws(()=>binding(f.root),/workspace MCP/);
+    const owner={...original.owner,userId:'workload_replicas_'+'b'.repeat(64)};
+    atomic(file,{...original,owner,workspaceMcp:{...workspaceMcp,url:'https://another.example/mcp'}});
+    assert.throws(()=>binding(f.root),/workspace MCP/);
+    atomic(file,{...original,owner,workspaceMcp});
+    atomic(join(f.root,'.mcp.json'),{mcpServers:{}});
+    const b=binding(f.root),id=f.event.session_id;
+    assert.match(inboxNotice(b,id,{delivery:'direct',after:1,through:2}),/workspace_board/);
+    atomic(join(b.profile,'board',hash(b.api)+'.capabilities.json'),{board:2});
+    const event={session_id:id,hook_event_name:'PreToolUse',tool_name:'mcp__workspace_board__board_inbox',tool_input:{}};
+    assert.equal(search(b,event)?.hookSpecificOutput.permissionDecision,'deny');
+    assert.equal(search(b,{...event,tool_input:{currentSession:{harness,sessionId:id}}}),undefined);
+    assert.equal(search(b,{...event,tool_name:'mcp__other__board_inbox'}),undefined);
+  }
+});
 
 for(const harness of ['claude-code','codex']){
   test(harness+' rejects incognito on Replicas and continues ordinary capture',async t=>{

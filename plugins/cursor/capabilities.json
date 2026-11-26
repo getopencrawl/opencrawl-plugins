@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "harness": "cursor",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "status": "ready",
   "cliRequired": false,
   "minimumHarnessVersion": "2026.11.17-f532c45",
@@ -15,7 +15,8 @@
     "subagentStop",
     "stop",
     "sessionEnd",
-    "preToolUse"
+    "preToolUse",
+    "board-inbox-at-start"
   ],
   "capture": {
     "minimum": true,

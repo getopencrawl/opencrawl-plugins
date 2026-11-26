@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "harness": "claude-code",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "status": "ready",
   "cliRequired": false,
   "minimumHarnessVersion": "2.1.327",
-  "callbacks": ["session-start", "capture", "search-context", "context-suggestions"],
+  "callbacks": ["session-start", "capture", "search-context", "context-suggestions", "board-inbox", "board-idle-wake"],
   "capture": {
     "minimum": true,
     "toolInputs": true,

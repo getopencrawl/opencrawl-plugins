@@ -32,6 +32,16 @@ is in `configHome/opencrawl/capture/config.json`, and saved authentication is in
 the same profile's origin-hashed session file. No credential belongs in the
 plugin source, release archive, manifest or nonsecret binding. Hooks ignore
 ambient OpenCrawl tokens and never fall back to a default account or cloud origin.
+
+For Claude Code and Cursor Desktop, the optional integer `boardIdleMinutes`
+sets how long a clean stop listens for direct mail. It defaults to 30. Set it
+to 0 for one final check, or to 1–30 for a bounded wait. Cloud Cursor and
+Codex perform one final check regardless of this setting. A launcher that owns
+a saved CLI session can set its own wait with `examples/idle.mjs`.
+
+When Claude Code or Codex has already offered a page during work, stopping
+leaves that page pending. The next user prompt can offer it again. New direct
+mail can still wake an open Claude session or reach a Codex final check.
 The enrollment must match the binding's origin, installation and owner on every
 invocation, and must still select that harness. Saved exclusions and recording
 opt-outs remain authoritative. Changing binding cannot redirect an old queue.
@@ -111,6 +121,14 @@ workspace-authenticated connection. The runtime enforces the workspace policy
 from the enrolled owner. Use the enrolled owner and installation ID in
 each private binding, with captureMode set to hook. Create that binding
 after the workspace starts so each workspace uses its own identity.
+
+For board delivery, copy the name and URL of the enrolled, workspace-authenticated
+MCP connection into the private binding, for example
+`"workspaceMcp":{"name":"opencrawl","url":"https://your-opencrawl.example/mcp"}`.
+Use the actual server name shown by the native client. The URL must match the
+bound OpenCrawl API. The hook uses that name when offering an inbox page and
+checks the native call's session arguments. Replicas supplies the connection
+and its credentials.
 
 Claude loads the packaged hooks directly. For a headless, admin-managed Codex
 environment, render the same packaged definitions with absolute command paths:

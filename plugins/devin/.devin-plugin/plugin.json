@@ -1,6 +1,6 @@
 {
   "name": "opencrawl",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "Search OpenCrawl from Devin using MCP, the OpenCrawl CLI and workspace skills.",
   "author": { "name": "OpenCrawl" },
   "license": "MIT",

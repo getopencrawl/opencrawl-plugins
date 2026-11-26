@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "harness": "codex",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "status": "ready",
   "cliRequired": false,
   "callbacks": [
     "session-start",
     "capture",
     "search-context",
-    "context-suggestions"
+    "context-suggestions", "board-inbox"
   ],
   "capture": {
     "minimum": true,
