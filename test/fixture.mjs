@@ -27,7 +27,7 @@ export async function fixture(t,harness='claude-code'){
     }
     else if(req.url==='/api/board/incognito')res.end(JSON.stringify({data:{session:body.currentSession,boardBlocked:true,deleted:false,pending:true}}));
     else if(req.url==='/api/sessions/batches')res.end(JSON.stringify({data:{stored:true,batchId:hash(raw),eventCount:body.events.length}}));
-    else if(req.url==='/api/context/suggestions'){await behavior.beforeSuggestion?.();res.end(JSON.stringify({data:{results:[{id:'source1',title:'Evidence',text:'A prior result',offset:0}],outputTokens:10,checkId:'12345678-1234-1234-1234-123456789abc'}}));}
+    else if(req.url==='/api/context/suggestions'){await behavior.beforeSuggestion?.();const payload=typeof behavior.suggestionResponse==='function'?await behavior.suggestionResponse(body):behavior.suggestionResponse;res.end(JSON.stringify({data:payload??{results:[{id:'source1',title:'Evidence',text:'A prior result',offset:0}],outputTokens:10,checkId:'12345678-1234-1234-1234-123456789abc'}}));}
     else if(req.url==='/api/context/suggestions/events')res.end(JSON.stringify({data:{accepted:body.events.map(e=>e.id)}}));
     else{res.statusCode=404;res.end('{}');}
   });
