@@ -1,6 +1,6 @@
 {
   "name": "opencrawl",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "Search your team's agent sessions and coordinate work with OpenCrawl.",
   "author": {
     "name": "OpenCrawl"
